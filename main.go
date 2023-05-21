@@ -13,10 +13,11 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	// "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
-	"github.com/multiformats/go-multiaddr"
+	// "github.com/multiformats/go-multiaddr"
 )
 
 // DiscoveryInterval is how often we re-publish our mDNS records.
@@ -36,15 +37,18 @@ func main() {
 
 	ctx := context.Background()
 
-	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 0))
+	// sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 4002))
 
 	// create a new libp2p Host that listens on a random TCP port
-	h, err := libp2p.New(libp2p.ListenAddrs(sourceMultiAddr))
+	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	if err != nil {
 		panic(err)
 	}
 
-	go discoverPeers(ctx, h)
+	// join the room from the cli flag, or the flag default
+	room := fmt.Sprintf("crcls-%s", *roomFlag)
+
+	go discoverPeers(ctx, h, room)
 
 	// create a new PubSub service using the GossipSub router
 	ps, err := pubsub.NewGossipSub(ctx, h)
@@ -63,20 +67,13 @@ func main() {
 		nick = defaultNick(h.ID())
 	}
 
-	// join the room from the cli flag, or the flag default
-	room := fmt.Sprintf("crcls-%s", *roomFlag)
-
 	// join the chat room
-	cr, err := JoinChatRoom(ctx, ps, h.ID(), nick, room)
+	_, err = JoinChatRoom(ctx, ps, h.ID(), nick, room)
 	if err != nil {
 		panic(err)
 	}
 
-	// draw the UI
-	ui := NewChatUI(cr)
-	if err = ui.Run(); err != nil {
-		printErr("error running text UI: %s", err)
-	}
+	select {}
 }
 
 // printErr is like fmt.Printf, but writes to stderr.
@@ -148,16 +145,16 @@ func initDHT(ctx context.Context, h host.Host) *dht.IpfsDHT {
 	return kademliaDHT
 }
 
-func discoverPeers(ctx context.Context, h host.Host) {
+func discoverPeers(ctx context.Context, h host.Host, room string) {
 	kademliaDHT := initDHT(ctx, h)
 	routingDiscovery := drouting.NewRoutingDiscovery(kademliaDHT)
-	dutil.Advertise(ctx, routingDiscovery, *roomFlag)
+	dutil.Advertise(ctx, routingDiscovery, room)
 
 	// Look for others who have announced and attempt to connect to them
 	anyConnected := false
 	for !anyConnected {
 		fmt.Println("Searching for peers...")
-		peerChan, err := routingDiscovery.FindPeers(ctx, *roomFlag)
+		peerChan, err := routingDiscovery.FindPeers(ctx, room)
 		if err != nil {
 			panic(err)
 		}

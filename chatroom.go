@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
@@ -63,7 +66,8 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickna
 	}
 
 	// start reading messages from the subscription in a loop
-	go cr.readLoop()
+	go cr.streamConsoleTo()
+	go cr.printMessagesFrom()
 	return cr, nil
 }
 
@@ -107,5 +111,28 @@ func (cr *ChatRoom) readLoop() {
 		}
 		// send valid messages onto the Messages channel
 		cr.Messages <- cm
+	}
+}
+
+func (cr *ChatRoom) streamConsoleTo() {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		s, err := reader.ReadString('\n')
+		if err != nil {
+			panic(err)
+		}
+		if err := cr.topic.Publish(cr.ctx, []byte(s)); err != nil {
+			fmt.Println("### Publish error:", err)
+		}
+	}
+}
+
+func (cr *ChatRoom) printMessagesFrom() {
+	for {
+		m, err := cr.sub.Next(cr.ctx)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(m.ReceivedFrom, ": ", string(m.Message.Data))
 	}
 }

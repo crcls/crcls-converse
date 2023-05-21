@@ -5,13 +5,18 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	// "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
+	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+	"github.com/multiformats/go-multiaddr"
 )
 
 // DiscoveryInterval is how often we re-publish our mDNS records.
@@ -20,19 +25,26 @@ const DiscoveryInterval = time.Hour
 // DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 const DiscoveryServiceTag = "pubsub-chat-example"
 
+var (
+	roomFlag = flag.String("room", "global", "name of topic to join")
+	nickFlag = flag.String("nick", "", "nickname to use in chat. will be generated if empty")
+)
+
 func main() {
 	// parse some flags to set our nickname and the room to join
-	nickFlag := flag.String("nick", "", "nickname to use in chat. will be generated if empty")
-	roomFlag := flag.String("room", "awesome-chat-room", "name of chat room to join")
 	flag.Parse()
 
 	ctx := context.Background()
 
+	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 0))
+
 	// create a new libp2p Host that listens on a random TCP port
-	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
+	h, err := libp2p.New(libp2p.ListenAddrs(sourceMultiAddr))
 	if err != nil {
 		panic(err)
 	}
+
+	go discoverPeers(ctx, h)
 
 	// create a new PubSub service using the GossipSub router
 	ps, err := pubsub.NewGossipSub(ctx, h)
@@ -41,9 +53,9 @@ func main() {
 	}
 
 	// setup local mDNS discovery
-	if err := setupDiscovery(h); err != nil {
-		panic(err)
-	}
+	// if err := setupLocalDiscovery(h); err != nil {
+	// 	panic(err)
+	// }
 
 	// use the nickname from the cli flag, or a default if blank
 	nick := *nickFlag
@@ -52,7 +64,7 @@ func main() {
 	}
 
 	// join the room from the cli flag, or the flag default
-	room := *roomFlag
+	room := fmt.Sprintf("crcls-%s", *roomFlag)
 
 	// join the chat room
 	cr, err := JoinChatRoom(ctx, ps, h.ID(), nick, room)
@@ -102,8 +114,65 @@ func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 
 // setupDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
-func setupDiscovery(h host.Host) error {
-	// setup mDNS discovery to find local peers
-	s := mdns.NewMdnsService(h, DiscoveryServiceTag, &discoveryNotifee{h: h})
-	return s.Start()
+// func setupLocalDiscovery(h host.Host) error {
+// 	// setup mDNS discovery to find local peers
+// 	s := mdns.NewMdnsService(h, DiscoveryServiceTag, &discoveryNotifee{h: h})
+// 	return s.Start()
+// }
+
+func initDHT(ctx context.Context, h host.Host) *dht.IpfsDHT {
+	// Start a DHT, for use in peer discovery. We can't just make a new DHT
+	// client because we want each peer to maintain its own local copy of the
+	// DHT, so that the bootstrapping node of the DHT can go down without
+	// inhibiting future peer discovery.
+	kademliaDHT, err := dht.New(ctx, h)
+	if err != nil {
+		panic(err)
+	}
+	if err = kademliaDHT.Bootstrap(ctx); err != nil {
+		panic(err)
+	}
+	var wg sync.WaitGroup
+	for _, peerAddr := range dht.DefaultBootstrapPeers {
+		peerinfo, _ := peer.AddrInfoFromP2pAddr(peerAddr)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := h.Connect(ctx, *peerinfo); err != nil {
+				fmt.Println("Bootstrap warning:", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	return kademliaDHT
+}
+
+func discoverPeers(ctx context.Context, h host.Host) {
+	kademliaDHT := initDHT(ctx, h)
+	routingDiscovery := drouting.NewRoutingDiscovery(kademliaDHT)
+	dutil.Advertise(ctx, routingDiscovery, *roomFlag)
+
+	// Look for others who have announced and attempt to connect to them
+	anyConnected := false
+	for !anyConnected {
+		fmt.Println("Searching for peers...")
+		peerChan, err := routingDiscovery.FindPeers(ctx, *roomFlag)
+		if err != nil {
+			panic(err)
+		}
+		for peer := range peerChan {
+			if peer.ID == h.ID() {
+				continue // No self connection
+			}
+			err := h.Connect(ctx, peer)
+			if err != nil {
+				fmt.Println("Failed connecting to ", peer.ID.Pretty(), ", error:", err)
+			} else {
+				fmt.Println("Connected to:", peer.ID.Pretty())
+				anyConnected = true
+			}
+		}
+	}
+	fmt.Println("Peer discovery complete")
 }

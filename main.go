@@ -131,7 +131,9 @@ func initDHT(ctx context.Context, h host.Host) *dht.IpfsDHT {
 	}
 	var wg sync.WaitGroup
 	for _, peerAddr := range dht.DefaultBootstrapPeers {
-		peerinfo, _ := peer.AddrInfoFromP2pAddr(peerAddr)
+		peerinfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
+		fmt.Println(*peerinfo)
+		fmt.Println(err)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

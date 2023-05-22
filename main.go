@@ -5,10 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/libp2p/go-libp2p/p2p/muxer/mplex"
@@ -32,9 +35,11 @@ const DiscoveryInterval = time.Hour
 // DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 const DiscoveryServiceTag = "pubsub-chat-example"
 
+const protocol = "/libp2p/crcls/0.0.1"
+
 var (
 	roomFlag = flag.String("room", "global", "name of topic to join")
-	nickFlag = flag.String("nick", "", "nickname to use in chat. will be generated if empty")
+	nameFlag = flag.String("name", "", "Name to use in chat. will be generated if empty")
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -99,18 +104,53 @@ func main() {
 	fmt.Printf("Host created. We are %s\n", h.ID())
 	fmt.Println(h.Addrs())
 
-	err = dht.Bootstrap(ctx)
+	go discoverPeers(ctx, h, dht)
+
+	// create a new PubSub service using the GossipSub router
+	ps, err := pubsub.NewGossipSub(ctx, h)
 	if err != nil {
+		panic(err)
+	}
+
+	// // setup local mDNS discovery
+	// // if err := setupLocalDiscovery(h); err != nil {
+	// // 	panic(err)
+	// // }
+
+	// // use the nickname from the cli flag, or a default if blank
+	// nick := *nickFlag
+	// if len(nick) == 0 {
+	// 	nick = defaultNick(h.ID())
+	// }
+
+	// join the chat room
+	_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
+	if err != nil {
+		panic(err)
+	}
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT)
+
+	select {
+	case <-stop:
+		h.Close()
+		os.Exit(0)
+	}
+}
+
+func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT) {
+	if err := dht.Bootstrap(ctx); err != nil {
 		panic(err)
 	}
 
 	notifee := &discoveryNotifee{h}
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
-	dutil.Advertise(ctx, routingDiscovery, room)
+	dutil.Advertise(ctx, routingDiscovery, protocol)
 
 	for {
 		fmt.Println("Searching for peers...")
-		peers, err := dutil.FindPeers(ctx, routingDiscovery, room)
+		peers, err := dutil.FindPeers(ctx, routingDiscovery, protocol)
 		if err != nil {
 			panic(err)
 		}
@@ -125,33 +165,6 @@ func main() {
 
 		time.Sleep(time.Second * 5)
 	}
-
-	// join the room from the cli flag, or the flag default
-
-	// go discoverPeers(ctx, h, room)
-
-	// create a new PubSub service using the GossipSub router
-	// ps, err := pubsub.NewGossipSub(ctx, h)
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// // setup local mDNS discovery
-	// // if err := setupLocalDiscovery(h); err != nil {
-	// // 	panic(err)
-	// // }
-
-	// // use the nickname from the cli flag, or a default if blank
-	// nick := *nickFlag
-	// if len(nick) == 0 {
-	// 	nick = defaultNick(h.ID())
-	// }
-
-	// // join the chat room
-	// _, err = JoinChatRoom(ctx, ps, h.ID(), nick, room)
-	// if err != nil {
-	// 	panic(err)
-	// }
 }
 
 // printErr is like fmt.Printf, but writes to stderr.

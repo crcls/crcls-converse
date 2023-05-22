@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -42,6 +43,7 @@ type ChatMessage struct {
 // JoinChatRoom tries to subscribe to the PubSub topic for the room name, returning
 // a ChatRoom on success.
 func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickname string, roomName string) (*ChatRoom, error) {
+	fmt.Println(ps.GetTopics())
 	// join the pubsub topic
 	topic, err := ps.Join(roomName)
 	if err != nil {
@@ -53,6 +55,16 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickna
 	if err != nil {
 		return nil, err
 	}
+
+	// topic.EventHandler(func(t *pubsub.TopicEventHandler) error {
+	// 	evt, err := t.NextPeerEvent(context.Background())
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	fmt.Printf("%+v", evt)
+	// 	return nil
+	// })
 
 	cr := &ChatRoom{
 		ctx:      ctx,
@@ -78,6 +90,7 @@ func (cr *ChatRoom) Publish(message string) error {
 		SenderID:   cr.self.Pretty(),
 		SenderNick: cr.nick,
 	}
+	fmt.Printf("%+v\n", m)
 	msgBytes, err := json.Marshal(m)
 	if err != nil {
 		return err
@@ -92,28 +105,6 @@ func (cr *ChatRoom) ListPeers() []peer.ID {
 	return cr.ps.ListPeers(cr.roomName)
 }
 
-// readLoop pulls messages from the pubsub topic and pushes them onto the Messages channel.
-func (cr *ChatRoom) readLoop() {
-	for {
-		msg, err := cr.sub.Next(cr.ctx)
-		if err != nil {
-			close(cr.Messages)
-			return
-		}
-		// only forward messages delivered by others
-		if msg.ReceivedFrom == cr.self {
-			continue
-		}
-		cm := new(ChatMessage)
-		err = json.Unmarshal(msg.Data, cm)
-		if err != nil {
-			continue
-		}
-		// send valid messages onto the Messages channel
-		cr.Messages <- cm
-	}
-}
-
 func (cr *ChatRoom) streamConsoleTo() {
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -121,7 +112,7 @@ func (cr *ChatRoom) streamConsoleTo() {
 		if err != nil {
 			panic(err)
 		}
-		if err := cr.topic.Publish(cr.ctx, []byte(s)); err != nil {
+		if err := cr.Publish(s); err != nil {
 			fmt.Println("### Publish error:", err)
 		}
 	}
@@ -129,10 +120,78 @@ func (cr *ChatRoom) streamConsoleTo() {
 
 func (cr *ChatRoom) printMessagesFrom() {
 	for {
-		m, err := cr.sub.Next(cr.ctx)
+		msg, err := cr.sub.Next(cr.ctx)
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println(m.ReceivedFrom, ": ", string(m.Message.Data))
+		// only forward messages delivered by others
+		if msg.ReceivedFrom == cr.self {
+			continue
+		}
+
+		cm := ChatMessage{}
+		err = json.Unmarshal(msg.Data, &cm)
+		if err != nil {
+			fmt.Printf("Failed to unmarshal message: %v\n", err)
+			continue
+		}
+
+		fmt.Printf("%s: %s\n", cm.SenderNick, cm.Message)
+	}
+}
+
+func handleStream(stream network.Stream) {
+	fmt.Println("Got a new stream!")
+
+	// Create a buffer stream for non blocking read and write.
+	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+	go readData(rw)
+	go writeData(rw)
+
+	// 'stream' will stay open until you close it (or the other side closes it).
+}
+
+func readData(rw *bufio.ReadWriter) {
+	for {
+		str, err := rw.ReadString('\n')
+		if err != nil {
+			fmt.Println("Error reading from buffer")
+			panic(err)
+		}
+
+		if str == "" {
+			return
+		}
+		if str != "\n" {
+			// Green console colour: 	\x1b[32m
+			// Reset console colour: 	\x1b[0m
+			fmt.Printf("\x1b[32m%s\x1b[0m> ", str)
+		}
+
+	}
+}
+
+func writeData(rw *bufio.ReadWriter) {
+	stdReader := bufio.NewReader(os.Stdin)
+
+	for {
+		fmt.Print("> ")
+		sendData, err := stdReader.ReadString('\n')
+		if err != nil {
+			fmt.Println("Error reading from stdin")
+			panic(err)
+		}
+
+		_, err = rw.WriteString(fmt.Sprintf("%s\n", sendData))
+		if err != nil {
+			fmt.Println("Error writing to buffer")
+			panic(err)
+		}
+		err = rw.Flush()
+		if err != nil {
+			fmt.Println("Error flushing buffer")
+			panic(err)
+		}
 	}
 }

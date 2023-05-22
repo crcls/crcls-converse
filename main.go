@@ -31,10 +31,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
-
 	// libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	// "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
-	"github.com/multiformats/go-multiaddr"
+	// "github.com/multiformats/go-multiaddr"
 )
 
 // DiscoveryInterval is how often we re-publish our mDNS records.
@@ -49,7 +48,7 @@ var (
 	roomFlag     = flag.String("room", "global", "name of topic to join")
 	nameFlag     = flag.String("name", "", "Name to use in chat. will be generated if empty")
 	relayFlag    = flag.Bool("relay", false, "Enable relay mode for this node.")
-	useRelayFlag = flag.Bool("use-relay", false, "Use the relay node to bypass NAT/Firewalls")
+	useRelayFlag = flag.String("use-relay", "", "Use the relay node to bypass NAT/Firewalls")
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -131,6 +130,8 @@ func startRelay(done chan bool) {
 		done <- true
 	}
 
+	h.SetStreamHandler(protocol.ID(protocolName), handleStream)
+
 	r, err := relay.New(h)
 	if err != nil {
 		fmt.Printf("Failed to instantiate the relay: %v\n", err)
@@ -147,7 +148,6 @@ func startRelay(done chan bool) {
 	select {
 	case <-done:
 		r.Close()
-		h.Close()
 	}
 }
 
@@ -191,29 +191,23 @@ func startClient(ctx context.Context, room string, done chan bool) {
 	h.SetStreamHandler(protocol.ID(protocolName), handleStream)
 
 	fmt.Printf("Host created. We are %s\n", h.ID())
-	fmt.Println(h.Addrs())
 
-	if *useRelayFlag {
-		multi5, _ := multiaddr.NewMultiaddr("/ip4/172.20.10.5/tcp/58231")
-		multi6, _ := multiaddr.NewMultiaddr("/ip4/172.20.10.5/udp/49941/quic")
-		multi7, _ := multiaddr.NewMultiaddr("/ip4/172.20.10.5/udp/49941/quic-v1")
-		multi8, _ := multiaddr.NewMultiaddr("/ip4/172.20.10.5/udp/57398/quic-v1/webtransport/certhash/uEiAZiRZx_LPE3l333zKQmznmZpo60o1WFLN97X9XpHVONA/certhash/uEiB7pzNWvVwEOK7eP6QAvUwt73eY4lGyyS91VzcA-6Ovxw")
-
-		relayAddr := peer.AddrInfo{
-			ID: "12D3KooWAGXSrH3DsCwFxmM2HXyR5xiKuTyaE46WEf8rPpCKtjMg",
-			Addrs: []multiaddr.Multiaddr{
-				multi5,
-				multi6,
-				multi7,
-				multi8,
-			},
+	if *useRelayFlag != "" {
+		relayAddr := peer.AddrInfo{}
+		if err := json.Unmarshal([]byte(*useRelayFlag), &relayAddr); err != nil {
+			fmt.Printf("Failed to unmarshal the relay node details: %v\n", err)
+			done <- true
+			return
 		}
 
 		if err := h.Connect(ctx, relayAddr); err != nil {
 			fmt.Println("Failed to connect to the relay", err)
 			done <- true
+			return
 		}
 	}
+
+	go discoverPeers(ctx, h, dht, room)
 
 	select {
 	case <-done:

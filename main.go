@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -22,7 +23,9 @@ import (
 
 	// pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
 	// libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	// "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
@@ -35,7 +38,7 @@ const DiscoveryInterval = time.Hour
 // DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 const DiscoveryServiceTag = "pubsub-chat-example"
 
-const protocol = "/libp2p/crcls/0.0.1"
+const protocolName = "/libp2p/crcls/0.0.1"
 
 var (
 	roomFlag = flag.String("room", "global", "name of topic to join")
@@ -55,6 +58,62 @@ func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	err := n.h.Connect(context.Background(), pi)
 	if err != nil {
 		fmt.Printf("error connecting to peer %s: %s\n", pi.ID.Pretty(), err)
+	}
+}
+
+func handleStream(stream network.Stream) {
+	fmt.Println("Got a new stream!")
+
+	// Create a buffer stream for non blocking read and write.
+	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+	go readData(rw)
+	go writeData(rw)
+
+	// 'stream' will stay open until you close it (or the other side closes it).
+}
+
+func readData(rw *bufio.ReadWriter) {
+	for {
+		str, err := rw.ReadString('\n')
+		if err != nil {
+			fmt.Println("Error reading from buffer")
+			panic(err)
+		}
+
+		if str == "" {
+			return
+		}
+		if str != "\n" {
+			// Green console colour: 	\x1b[32m
+			// Reset console colour: 	\x1b[0m
+			fmt.Printf("\x1b[32m%s\x1b[0m> ", str)
+		}
+
+	}
+}
+
+func writeData(rw *bufio.ReadWriter) {
+	stdReader := bufio.NewReader(os.Stdin)
+
+	for {
+		fmt.Print("> ")
+		sendData, err := stdReader.ReadString('\n')
+		if err != nil {
+			fmt.Println("Error reading from stdin")
+			panic(err)
+		}
+
+		_, err = rw.WriteString(fmt.Sprintf("%s\n", sendData))
+		if err != nil {
+			fmt.Println("Error writing to buffer")
+			panic(err)
+		}
+		err = rw.Flush()
+		if err != nil {
+			fmt.Println("Error flushing buffer")
+			panic(err)
+		}
 	}
 }
 
@@ -101,10 +160,12 @@ func main() {
 		panic(err)
 	}
 
+	h.SetStreamHandler(protocol.ID(protocolName), handleStream)
+
 	fmt.Printf("Host created. We are %s\n", h.ID())
 	fmt.Println(h.Addrs())
 
-	go discoverPeers(ctx, h, dht)
+	go discoverPeers(ctx, h, dht, room)
 
 	// create a new PubSub service using the GossipSub router
 	ps, err := pubsub.NewGossipSub(ctx, h)
@@ -139,18 +200,18 @@ func main() {
 	}
 }
 
-func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT) {
+func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, room string) {
 	if err := dht.Bootstrap(ctx); err != nil {
 		panic(err)
 	}
 
 	notifee := &discoveryNotifee{h}
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
-	dutil.Advertise(ctx, routingDiscovery, protocol)
+	dutil.Advertise(ctx, routingDiscovery, room)
 
 	for {
 		fmt.Println("Searching for peers...")
-		peers, err := dutil.FindPeers(ctx, routingDiscovery, protocol)
+		peers, err := dutil.FindPeers(ctx, routingDiscovery, room)
 		if err != nil {
 			panic(err)
 		}

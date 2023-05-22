@@ -12,8 +12,10 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+
 	// pubsub "github.com/libp2p/go-libp2p-pubsub"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
+	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	// dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/libp2p/go-libp2p/p2p/muxer/mplex"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
@@ -41,8 +43,9 @@ const DiscoveryServiceTag = "pubsub-chat-example"
 const protocolName = "/libp2p/crcls/0.0.1"
 
 var (
-	roomFlag = flag.String("room", "global", "name of topic to join")
-	nameFlag = flag.String("name", "", "Name to use in chat. will be generated if empty")
+	roomFlag  = flag.String("room", "global", "name of topic to join")
+	nameFlag  = flag.String("name", "", "Name to use in chat. will be generated if empty")
+	relayFlag = flag.Bool("relay", false, "Enable relay mode for this node.")
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -117,13 +120,29 @@ func writeData(rw *bufio.ReadWriter) {
 	}
 }
 
-func main() {
-	// parse some flags to set our nickname and the room to join
-	flag.Parse()
+func startRelay(done chan bool) {
+	h, err := libp2p.New()
+	if err != nil {
+		fmt.Printf("Failed to create relay1: %v\n", err)
+		done <- true
+	}
 
-	ctx := context.Background()
-	room := fmt.Sprintf("crcls-%s", *roomFlag)
+	r, err := relay.New(h)
+	if err != nil {
+		fmt.Printf("Failed to instantiate the relay: %v\n", err)
+		done <- true
+	}
 
+	fmt.Printf("ID: %s\nAddresses: %v", h.ID(), h.Addrs())
+
+	select {
+	case <-done:
+		r.Close()
+		h.Close()
+	}
+}
+
+func startClient(ctx context.Context, room string, done chan bool) {
 	transports := libp2p.ChainOptions(
 		libp2p.Transport(tcp.NewTCPTransport),
 		libp2p.Transport(websocket.New),
@@ -167,6 +186,27 @@ func main() {
 
 	go discoverPeers(ctx, h, dht, room)
 
+	select {
+	case <-done:
+		h.Close()
+	}
+}
+
+func main() {
+	// parse some flags to set our nickname and the room to join
+	flag.Parse()
+
+	ctx := context.Background()
+	room := fmt.Sprintf("crcls-%s", *roomFlag)
+
+	done := make(chan bool, 1)
+
+	if *relayFlag {
+		startRelay(done)
+	} else {
+		startClient(ctx, room, done)
+	}
+
 	// create a new PubSub service using the GossipSub router
 	// ps, err := pubsub.NewGossipSub(ctx, h)
 	// if err != nil {
@@ -195,7 +235,7 @@ func main() {
 
 	select {
 	case <-stop:
-		h.Close()
+		done <- true
 		os.Exit(0)
 	}
 }

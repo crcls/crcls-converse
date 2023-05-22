@@ -14,7 +14,7 @@ import (
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	// pubsub "github.com/libp2p/go-libp2p-pubsub"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
-	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+	// dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/libp2p/go-libp2p/p2p/muxer/mplex"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
@@ -207,7 +207,7 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, room s
 
 	notifee := &discoveryNotifee{h}
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
-	dutil.Advertise(ctx, routingDiscovery, room)
+	routingDiscovery.Advertise(ctx, room)
 
 	fmt.Println("Searching for peers...")
 	peers, err := routingDiscovery.FindPeers(ctx, room)

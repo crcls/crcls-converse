@@ -11,16 +11,19 @@ import (
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+	"github.com/libp2p/go-libp2p/p2p/muxer/mplex"
+	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
+	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
+	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
+	"github.com/libp2p/go-libp2p/p2p/transport/websocket"
 
 	// pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
-
 	// libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
-
 	// "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
-	"github.com/multiformats/go-multiaddr"
+	// "github.com/multiformats/go-multiaddr"
 )
 
 // DiscoveryInterval is how often we re-publish our mDNS records.
@@ -57,8 +60,22 @@ func main() {
 	ctx := context.Background()
 	room := fmt.Sprintf("crcls-%s", *roomFlag)
 
-	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 4002))
+	transports := libp2p.ChainOptions(
+		libp2p.Transport(tcp.NewTCPTransport),
+		libp2p.Transport(websocket.New),
+	)
 
+	muxers := libp2p.ChainOptions(
+		libp2p.Muxer("/yamux/1.0.0", yamux.DefaultTransport),
+		libp2p.Muxer("/mplex/6.7.0", mplex.DefaultTransport),
+	)
+
+	security := libp2p.Security(tls.ID, tls.New)
+
+	listenAddrs := libp2p.ListenAddrStrings(
+		"/ip4/0.0.0.0/tcp/0",
+		"/ip4/0.0.0.0/tcp/0/ws",
+	)
 	var dht *kaddht.IpfsDHT
 	newDHT := func(h host.Host) (routing.PeerRouting, error) {
 		var err error
@@ -69,7 +86,10 @@ func main() {
 
 	// create a new libp2p Host that listens on a random TCP port
 	h, err := libp2p.New(
-		libp2p.ListenAddrs(sourceMultiAddr),
+		transports,
+		muxers,
+		security,
+		listenAddrs,
 		routing,
 	)
 	if err != nil {
@@ -87,6 +107,7 @@ func main() {
 	notifee := &discoveryNotifee{h}
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
 	dutil.Advertise(ctx, routingDiscovery, room)
+
 	for {
 		fmt.Println("Searching for peers...")
 		peers, err := dutil.FindPeers(ctx, routingDiscovery, room)

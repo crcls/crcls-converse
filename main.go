@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -16,6 +17,7 @@ import (
 	// pubsub "github.com/libp2p/go-libp2p-pubsub"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
+
 	// dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/libp2p/go-libp2p/p2p/muxer/mplex"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
@@ -29,9 +31,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
+
 	// libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	// "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
-	// "github.com/multiformats/go-multiaddr"
+	"github.com/multiformats/go-multiaddr"
 )
 
 // DiscoveryInterval is how often we re-publish our mDNS records.
@@ -43,9 +46,10 @@ const DiscoveryServiceTag = "pubsub-chat-example"
 const protocolName = "/libp2p/crcls/0.0.1"
 
 var (
-	roomFlag  = flag.String("room", "global", "name of topic to join")
-	nameFlag  = flag.String("name", "", "Name to use in chat. will be generated if empty")
-	relayFlag = flag.Bool("relay", false, "Enable relay mode for this node.")
+	roomFlag     = flag.String("room", "global", "name of topic to join")
+	nameFlag     = flag.String("name", "", "Name to use in chat. will be generated if empty")
+	relayFlag    = flag.Bool("relay", false, "Enable relay mode for this node.")
+	useRelayFlag = flag.Bool("use-relay", false, "Use the relay node to bypass NAT/Firewalls")
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -133,7 +137,12 @@ func startRelay(done chan bool) {
 		done <- true
 	}
 
-	fmt.Printf("ID: %s\nAddresses: %v", h.ID(), h.Addrs())
+	json, err := json.Marshal(host.InfoFromHost(h))
+	if err != nil {
+		fmt.Printf("Failed to marshal Relay AddrInfo: %v\n", err)
+	}
+
+	fmt.Printf("Relay AddrInfo: %s\n", json)
 
 	select {
 	case <-done:
@@ -184,7 +193,27 @@ func startClient(ctx context.Context, room string, done chan bool) {
 	fmt.Printf("Host created. We are %s\n", h.ID())
 	fmt.Println(h.Addrs())
 
-	go discoverPeers(ctx, h, dht, room)
+	if *useRelayFlag {
+		multi5, _ := multiaddr.NewMultiaddr("/ip4/172.20.10.5/tcp/58231")
+		multi6, _ := multiaddr.NewMultiaddr("/ip4/172.20.10.5/udp/49941/quic")
+		multi7, _ := multiaddr.NewMultiaddr("/ip4/172.20.10.5/udp/49941/quic-v1")
+		multi8, _ := multiaddr.NewMultiaddr("/ip4/172.20.10.5/udp/57398/quic-v1/webtransport/certhash/uEiAZiRZx_LPE3l333zKQmznmZpo60o1WFLN97X9XpHVONA/certhash/uEiB7pzNWvVwEOK7eP6QAvUwt73eY4lGyyS91VzcA-6Ovxw")
+
+		relayAddr := peer.AddrInfo{
+			ID: "12D3KooWAGXSrH3DsCwFxmM2HXyR5xiKuTyaE46WEf8rPpCKtjMg",
+			Addrs: []multiaddr.Multiaddr{
+				multi5,
+				multi6,
+				multi7,
+				multi8,
+			},
+		}
+
+		if err := h.Connect(ctx, relayAddr); err != nil {
+			fmt.Println("Failed to connect to the relay", err)
+			done <- true
+		}
+	}
 
 	select {
 	case <-done:

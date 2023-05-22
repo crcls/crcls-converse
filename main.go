@@ -12,7 +12,7 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	// pubsub "github.com/libp2p/go-libp2p-pubsub"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/libp2p/go-libp2p/p2p/muxer/mplex"
@@ -168,10 +168,10 @@ func main() {
 	go discoverPeers(ctx, h, dht, room)
 
 	// create a new PubSub service using the GossipSub router
-	ps, err := pubsub.NewGossipSub(ctx, h)
-	if err != nil {
-		panic(err)
-	}
+	// ps, err := pubsub.NewGossipSub(ctx, h)
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	// // setup local mDNS discovery
 	// // if err := setupLocalDiscovery(h); err != nil {
@@ -185,10 +185,10 @@ func main() {
 	// }
 
 	// join the chat room
-	_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
-	if err != nil {
-		panic(err)
-	}
+	// _, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT)

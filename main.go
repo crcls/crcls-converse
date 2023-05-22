@@ -209,22 +209,18 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, room s
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
 	dutil.Advertise(ctx, routingDiscovery, room)
 
-	for {
-		fmt.Println("Searching for peers...")
-		peers, err := dutil.FindPeers(ctx, routingDiscovery, room)
-		if err != nil {
-			panic(err)
-		}
+	fmt.Println("Searching for peers...")
+	peers, err := routingDiscovery.FindPeers(ctx, room)
+	if err != nil {
+		panic(err)
+	}
 
-		for _, peer := range peers {
-			if peer.ID == h.ID() {
-				continue // No self connection
-			}
+	select {
+	case peer := <-peers:
 
+		if peer.ID != h.ID() {
 			notifee.HandlePeerFound(peer)
 		}
-
-		time.Sleep(time.Second * 5)
 	}
 }
 

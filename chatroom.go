@@ -71,6 +71,7 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickna
 		log:      log,
 	}
 
+	fmt.Printf("%s: ", nickname)
 	// start reading messages from the subscription in a loop
 	go cr.streamConsoleTo()
 	go cr.printMessagesFrom()
@@ -131,6 +132,7 @@ func (cr *ChatRoom) printMessagesFrom() {
 		}
 
 		fmt.Printf("%s: %s\n", cm.SenderNick, cm.Message)
+		fmt.Printf("%s: ", cr.nick)
 	}
 }
 

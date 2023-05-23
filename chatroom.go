@@ -84,7 +84,7 @@ func (cr *ChatRoom) Publish(message string) error {
 		SenderID:   cr.self.Pretty(),
 		SenderNick: cr.nick,
 	}
-	fmt.Printf("%+v\n", m)
+	cr.log.Debug("%+v\n", m)
 	msgBytes, err := json.Marshal(m)
 	if err != nil {
 		return err
@@ -130,7 +130,7 @@ func (cr *ChatRoom) printMessagesFrom() {
 			continue
 		}
 
-		cr.log.Debugf("%s: %s\n", cm.SenderNick, cm.Message)
+		fmt.Printf("%s: %s\n", cm.SenderNick, cm.Message)
 	}
 }
 

@@ -185,7 +185,7 @@ func main() {
 	if *verboseFlag {
 		logging.SetLogLevel("crcls", "debug")
 	} else {
-		logging.SetLogLevel("crcls", "panic")
+		logging.SetLogLevel("crcls", "info")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -42,7 +42,6 @@ var (
 	relayFlag    = flag.Bool("relay", false, "Enable relay mode for this node.")
 	useRelayFlag = flag.String("use-relay", "", "Use the relay node to bypass NAT/Firewalls")
 	portFlag     = flag.Int("port", 0, "PORT to connect on. 3123-3130")
-	leaderFlag   = flag.Bool("leader", false, "Start this node in leader mode.")
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -57,12 +56,7 @@ func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	n.h.Connect(context.Background(), pi)
 }
 
-func startRelay() {
-	h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag)))
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create relay: %v\n", err))
-	}
-
+func startRelay(h host.Host) {
 	if _, err := relay.New(h); err != nil {
 		panic(fmt.Sprintf("Failed to instantiate the relay: %v\n", err))
 	}
@@ -157,8 +151,18 @@ func isNewPeer(p peer.AddrInfo, h host.Host) bool {
 func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conChan chan bool) {
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
 
+	ttl := time.Minute
+	if *relayFlag {
+		ttl = time.Hour
+	}
+
 	// Let others know we are available to join for one minute.
-	dutil.Advertise(ctx, routingDiscovery, ProtocolName, discovery.TTL(time.Minute))
+	dutil.Advertise(ctx, routingDiscovery, ProtocolName, discovery.TTL(ttl))
+
+	if *relayFlag {
+		fmt.Printf("Advertising the relay for protocol: %s\n", ProtocolName)
+		return
+	}
 
 	peers, err := routingDiscovery.FindPeers(ctx, ProtocolName)
 	if err != nil {
@@ -171,7 +175,6 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 		case peer := <-peers:
 			if isNewPeer(peer, h) && len(peer.ID) != 0 && len(peer.Addrs) != 0 {
 				if err := h.Connect(ctx, peer); err != nil {
-					fmt.Println(err)
 					dht.RoutingTable().RemovePeer(peer.ID)
 					h.Peerstore().RemovePeer(peer.ID)
 				} else {
@@ -196,52 +199,47 @@ func main() {
 
 	conChan := make(chan bool, 1)
 
-	if *relayFlag {
-		startRelay()
-	} else {
-		h, _ := startClient(ctx)
-		dht := initDHT(ctx, h)
+	h, _ := startClient(ctx)
+	dht := initDHT(ctx, h)
 
-		ps, err := pubsub.NewGossipSub(ctx, h)
-		if err != nil {
+	ps, err := pubsub.NewGossipSub(ctx, h)
+	if err != nil {
+		panic(err)
+	}
+
+	if *relayFlag {
+		startRelay(h)
+
+		// initialize the chat rooms
+		// TODO: get a persisted list of rooms from somewhere
+		if _, err := ps.Join("crcls-global"); err != nil {
 			panic(err)
 		}
-
-		if *leaderFlag {
-			// initialize the chat rooms
-			// TODO: get a persisted list of rooms from somewhere
-			if _, err := ps.Join("crcls-global"); err != nil {
-				panic(err)
-			}
-		}
-
-		go discoverPeers(ctx, h, dht, conChan)
-
-		// setup local mDNS discovery
-		// if err := setupLocalDiscovery(h); err != nil {
-		// 	panic(err)
-		// }
-
-		select {
-		case <-conChan:
-			if !*leaderFlag {
-				// create a new PubSub service using the GossipSub router
-				_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
-				if err != nil {
-					panic(err)
-				}
-			}
-		case <-ctx.Done():
-			h.Peerstore().ClearAddrs(h.ID())
-			h.Peerstore().RemovePeer(h.ID())
-			h.Close()
-		}
 	}
+
+	go discoverPeers(ctx, h, dht, conChan)
+
+	// setup local mDNS discovery
+	// if err := setupLocalDiscovery(h); err != nil {
+	// 	panic(err)
+	// }
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT)
 
 	select {
+	case <-conChan:
+		if !*relayFlag {
+			// create a new PubSub service using the GossipSub router
+			_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
+			if err != nil {
+				panic(err)
+			}
+		}
+	case <-ctx.Done():
+		h.Peerstore().ClearAddrs(h.ID())
+		h.Peerstore().RemovePeer(h.ID())
+		h.Close()
 	case <-stop:
 		cancel()
 		os.Exit(0)

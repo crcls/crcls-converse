@@ -43,7 +43,6 @@ type ChatMessage struct {
 // JoinChatRoom tries to subscribe to the PubSub topic for the room name, returning
 // a ChatRoom on success.
 func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickname string, roomName string) (*ChatRoom, error) {
-	fmt.Println(ps.GetTopics())
 	// join the pubsub topic
 	topic, err := ps.Join(roomName)
 	if err != nil {
@@ -110,7 +109,7 @@ func (cr *ChatRoom) streamConsoleTo() {
 	for {
 		s, err := reader.ReadString('\n')
 		if err != nil {
-			panic(err)
+			return
 		}
 		if err := cr.Publish(s); err != nil {
 			fmt.Println("### Publish error:", err)
@@ -122,7 +121,7 @@ func (cr *ChatRoom) printMessagesFrom() {
 	for {
 		msg, err := cr.sub.Next(cr.ctx)
 		if err != nil {
-			panic(err)
+			return
 		}
 		// only forward messages delivered by others
 		if msg.ReceivedFrom == cr.self {

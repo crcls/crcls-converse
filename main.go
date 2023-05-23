@@ -19,9 +19,11 @@ import (
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 
+	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/routing"
+	// "github.com/libp2p/go-libp2p/core/peerstore"
 	// "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	// "github.com/multiformats/go-multiaddr"
 )
@@ -32,13 +34,14 @@ const DiscoveryInterval = time.Hour
 // DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 const DiscoveryServiceTag = "crcls-converse"
 
-const ProtocolName = "/libp2p/crcls/0.0.1"
+const ProtocolName = "/crcls/0.0.1"
 
 var (
 	roomFlag     = flag.String("room", "global", "name of topic to join")
 	nameFlag     = flag.String("name", "", "Name to use in chat. will be generated if empty")
 	relayFlag    = flag.Bool("relay", false, "Enable relay mode for this node.")
 	useRelayFlag = flag.String("use-relay", "", "Use the relay node to bypass NAT/Firewalls")
+	portFlag     = flag.Int("port", 3123, "PORT to connect on. 3123-3130")
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -54,7 +57,7 @@ func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 }
 
 func startRelay(done chan bool) {
-	h, err := libp2p.New()
+	h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag)))
 	if err != nil {
 		fmt.Printf("Failed to create relay1: %v\n", err)
 		done <- true
@@ -79,16 +82,13 @@ func startRelay(done chan bool) {
 	}
 }
 
-func startClient(ctx context.Context) (host.Host, *kaddht.IpfsDHT, error) {
-	var dht *kaddht.IpfsDHT
-	newDHT := func(h host.Host) (routing.PeerRouting, error) {
-		var err error
-		dht, err = kaddht.New(ctx, h)
-		return dht, err
-	}
-	routing := libp2p.Routing(newDHT)
+func startClient(ctx context.Context) (host.Host, error) {
+	opts := libp2p.ChainOptions(
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/3123"),
+		libp2p.ProtocolVersion(ProtocolName),
+	)
 	// create a new libp2p Host that listens on a random TCP port
-	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"), routing)
+	h, err := libp2p.New(opts)
 	if err != nil {
 		panic(err)
 	}
@@ -97,12 +97,12 @@ func startClient(ctx context.Context) (host.Host, *kaddht.IpfsDHT, error) {
 		relayAddr := peer.AddrInfo{}
 		if err := json.Unmarshal([]byte(*useRelayFlag), &relayAddr); err != nil {
 			fmt.Printf("Failed to unmarshal the relay node details: %v\n", err)
-			return nil, nil, err
+			return nil, err
 		}
 
 		if err := h.Connect(ctx, relayAddr); err != nil {
 			fmt.Printf("Failed to connnect to the relay: %v\n", err)
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -113,30 +113,18 @@ func startClient(ctx context.Context) (host.Host, *kaddht.IpfsDHT, error) {
 	fmt.Printf("Peers: %v\n", h.Network().Peers())
 	// fmt.Printf("Connections: %v\n", h.Network().Conns())
 
-	return h, dht, nil
+	return h, nil
 }
 
-func isNewPeer(p peer.AddrInfo, h host.Host) bool {
-	peers := h.Network().Peers()
-
-	if p.ID == h.ID() {
-		return false
-	}
-
-	for _, id := range peers {
-		if id == p.ID {
-			return false
-		}
-	}
-
-	return true
-}
-
-func initDHT(ctx context.Context, dht *kaddht.IpfsDHT, h host.Host) {
-	if err := dht.Bootstrap(ctx); err != nil {
+func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
+	dht, err := kaddht.New(ctx, h)
+	if err != nil {
 		panic(err)
 	}
 
+	if err = dht.Bootstrap(ctx); err != nil {
+		panic(err)
+	}
 	var wg sync.WaitGroup
 	for _, peerAddr := range kaddht.DefaultBootstrapPeers {
 		peerinfo, _ := peer.AddrInfoFromP2pAddr(peerAddr)
@@ -151,51 +139,75 @@ func initDHT(ctx context.Context, dht *kaddht.IpfsDHT, h host.Host) {
 	wg.Wait()
 
 	fmt.Println("Connected to the DHT")
+
+	return dht
+}
+
+func isNewPeer(p peer.AddrInfo, h host.Host) bool {
+	if p.ID == h.ID() {
+		return false
+	}
+
+	peers := h.Network().Peers()
+
+	for _, id := range peers {
+		if id == p.ID {
+			return false
+		}
+	}
+
+	conn := h.Network().Connectedness(p.ID)
+
+	return conn == network.CanConnect || conn == network.NotConnected
 }
 
 func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT) {
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
-	dutil.Advertise(ctx, routingDiscovery, ProtocolName)
+
+	// Let others know we are available to join for one minute.
+	dutil.Advertise(ctx, routingDiscovery, ProtocolName, discovery.TTL(time.Minute))
+
+	peers, err := routingDiscovery.FindPeers(ctx, ProtocolName)
+	if err != nil {
+		panic(err)
+	}
 
 	connected := false
 	for !connected {
-		peers, err := routingDiscovery.FindPeers(ctx, ProtocolName)
-		if err != nil {
-			panic(err)
-		}
-
-		for peer := range peers {
-			if isNewPeer(peer, h) && len(peer.Addrs) != 0 {
+		select {
+		case peer := <-peers:
+			if isNewPeer(peer, h) && len(peer.ID) != 0 && len(peer.Addrs) != 0 {
 				fmt.Println(peer)
-
-				if err := h.Connect(ctx, peer); err == nil {
+				if err := h.Connect(ctx, peer); err != nil {
+					fmt.Println(err)
+					dht.RoutingTable().RemovePeer(peer.ID)
+					h.Peerstore().RemovePeer(peer.ID)
+				} else {
 					fmt.Printf("Connected to %s\n", peer.ID)
 					connected = true
-				} else {
-					h.Peerstore().ClearAddrs(peer.ID)
-					h.Peerstore().RemovePeer(peer.ID)
-					dht.RoutingTable().RemovePeer(peer.ID)
 				}
 			}
+		case <-ctx.Done():
+			return
 		}
 	}
 
-	fmt.Println("Connected to CRCLS.")
+	fmt.Println("Connected to CRCLS")
 }
 
 func main() {
 	flag.Parse()
 
-	ctx := context.Background()
-	// room := fmt.Sprintf("crcls-%s", *roomFlag)
+	ctx, cancel := context.WithCancel(context.Background())
+	room := fmt.Sprintf("crcls-%s", *roomFlag)
 
 	done := make(chan bool, 1)
 
 	if *relayFlag {
 		startRelay(done)
 	} else {
-		h, dht, _ := startClient(ctx)
-		initDHT(ctx, dht, h)
+		h, _ := startClient(ctx)
+		dht := initDHT(ctx, h)
 
 		go discoverPeers(ctx, h, dht)
 
@@ -211,7 +223,7 @@ func main() {
 		// }
 
 		// join the chat room
-		_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, ProtocolName)
+		_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
 		if err != nil {
 			panic(err)
 		}
@@ -221,14 +233,9 @@ func main() {
 
 		select {
 		case <-stop:
-			dht.RoutingTable().RemovePeer(h.ID())
-			dht.RoutingTable().PeerRemoved(h.ID())
-
-			h.Network().ClosePeer(h.ID())
+			cancel()
 			h.Peerstore().ClearAddrs(h.ID())
-			h.ConnManager().Close()
-			fmt.Println(h.Network().Connectedness(h.ID()))
-
+			h.Peerstore().RemovePeer(h.ID())
 			h.Close()
 
 			done <- true

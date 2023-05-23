@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	logging "github.com/ipfs/go-log/v2"
+
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -40,22 +42,13 @@ var (
 	roomFlag     = flag.String("room", "global", "name of topic to join")
 	nameFlag     = flag.String("name", "", "Name to use in chat. will be generated if empty")
 	relayFlag    = flag.Bool("relay", false, "Enable relay mode for this node.")
-	useRelayFlag = flag.String("use-relay", "", "Use the relay node to bypass NAT/Firewalls")
-	portFlag     = flag.Int("port", 0, "PORT to connect on. 3123-3130")
+	useRelayFlag = flag.String("r", "", "AddrInfo Use the relay node to bypass NAT/Firewalls")
+	portFlag     = flag.Int("p", 0, "PORT to connect on. 3123-3130")
 	leaderFlag   = flag.Bool("leader", false, "Start this node in leader mode.")
+	verboseFlag  = flag.Bool("v", false, "Verbose output")
 )
 
-// discoveryNotifee gets notified when we find a new peer via mDNS discovery
-type discoveryNotifee struct {
-	h host.Host
-}
-
-// HandlePeerFound connects to peers discovered via mDNS. Once they're connected,
-// the PubSub system will automatically start interacting with them if they also
-// support PubSub.
-func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
-	n.h.Connect(context.Background(), pi)
-}
+var log = logging.Logger("crcls")
 
 func startRelay() {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
@@ -71,7 +64,7 @@ func startRelay() {
 		panic(fmt.Sprintf("Failed to marshal Relay AddrInfo: %v\n", err))
 	}
 
-	fmt.Printf("Relay AddrInfo: %s\n", json)
+	log.Infof("Relay AddrInfo: %s\n", json)
 }
 
 func startClient(ctx context.Context) (host.Host, error) {
@@ -88,22 +81,21 @@ func startClient(ctx context.Context) (host.Host, error) {
 	if *useRelayFlag != "" {
 		relayAddr := peer.AddrInfo{}
 		if err := json.Unmarshal([]byte(*useRelayFlag), &relayAddr); err != nil {
-			fmt.Printf("Failed to unmarshal the relay node details: %v\n", err)
+			log.Errorf("Failed to unmarshal the relay node details: %v\n", err)
 			return nil, err
 		}
 
 		if err := h.Connect(ctx, relayAddr); err != nil {
-			fmt.Printf("Failed to connnect to the relay: %v\n", err)
+			log.Errorf("Failed to connnect to the relay: %v\n", err)
 			return nil, err
 		}
 	}
 
 	// h.SetStreamHandler(protocol.ID(protocolName), handleStream)
 
-	fmt.Printf("Host created. We are %s\n", h.ID())
-	fmt.Printf("Addrs: %v\n", h.Addrs())
-	fmt.Printf("Peers: %v\n", h.Network().Peers())
-	// fmt.Printf("Connections: %v\n", h.Network().Conns())
+	log.Infof("host created. we are %s\n", h.ID())
+	log.Infof("addrs: %v\n", h.Addrs())
+	log.Infof("peers: %v\n", h.Network().Peers())
 
 	return h, nil
 }
@@ -124,13 +116,13 @@ func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
 		go func() {
 			defer wg.Done()
 			if err := h.Connect(ctx, *peerinfo); err != nil {
-				fmt.Println("Bootstrap warning:", err)
+				log.Warn("Bootstrap warning:", err)
 			}
 		}()
 	}
 	wg.Wait()
 
-	fmt.Println("Connected to the DHT")
+	log.Info("Connected to the DHT")
 
 	return dht
 }
@@ -170,11 +162,11 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 		case peer := <-peers:
 			if isNewPeer(peer, h) && len(peer.ID) != 0 && len(peer.Addrs) != 0 {
 				if err := h.Connect(ctx, peer); err != nil {
-					fmt.Println(err)
+					log.Error(err)
 					dht.RoutingTable().RemovePeer(peer.ID)
 					h.Peerstore().RemovePeer(peer.ID)
 				} else {
-					fmt.Printf("Connected to %s\n", peer.ID)
+					log.Infof("Connected to %s\n", peer.ID)
 					connected = true
 					conChan <- true
 				}
@@ -184,11 +176,25 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 		}
 	}
 
-	fmt.Println("Connected to CRCLS")
+	log.Info("Connected to CRCLS")
 }
 
 func main() {
 	flag.Parse()
+
+	var lvl logging.LogLevel
+
+	var err error
+	if *verboseFlag {
+		lvl, err = logging.LevelFromString("debug")
+	} else {
+		lvl, err = logging.LevelFromString("info")
+	}
+
+	if err != nil {
+		panic(err)
+	}
+	logging.SetAllLoggers(lvl)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	room := fmt.Sprintf("crcls-%s", *roomFlag)
@@ -209,7 +215,11 @@ func main() {
 		if *leaderFlag {
 			// initialize the chat rooms
 			// TODO: get a persisted list of rooms from somewhere
-			if _, err := ps.Join("crcls-global"); err != nil {
+			global, err := ps.Join("crcls-global")
+			if err != nil {
+				panic(err)
+			}
+			if _, err := global.Subscribe(); err != nil {
 				panic(err)
 			}
 		}
@@ -224,7 +234,7 @@ func main() {
 		case <-conChan:
 			if !*leaderFlag {
 				// create a new PubSub service using the GossipSub router
-				_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
+				_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log)
 				if err != nil {
 					panic(err)
 				}

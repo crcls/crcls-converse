@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
@@ -31,6 +32,7 @@ type ChatRoom struct {
 	roomName string
 	self     peer.ID
 	nick     string
+	log      *logging.ZapEventLogger
 }
 
 // ChatMessage gets converted to/from JSON and sent in the body of pubsub messages.
@@ -42,7 +44,7 @@ type ChatMessage struct {
 
 // JoinChatRoom tries to subscribe to the PubSub topic for the room name, returning
 // a ChatRoom on success.
-func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickname string, roomName string) (*ChatRoom, error) {
+func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickname string, roomName string, log *logging.ZapEventLogger) (*ChatRoom, error) {
 	// join the pubsub topic
 	topic, err := ps.Join(roomName)
 	if err != nil {
@@ -55,7 +57,7 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickna
 		return nil, err
 	}
 
-	fmt.Printf("You have now joined the %s room.\n", roomName)
+	log.Infof("You have now joined the %s room.\n", roomName)
 
 	cr := &ChatRoom{
 		ctx:      ctx,
@@ -66,6 +68,7 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickna
 		nick:     nickname,
 		roomName: roomName,
 		Messages: make(chan *ChatMessage, ChatRoomBufSize),
+		log:      log,
 	}
 
 	// start reading messages from the subscription in a loop
@@ -104,7 +107,7 @@ func (cr *ChatRoom) streamConsoleTo() {
 			return
 		}
 		if err := cr.Publish(s); err != nil {
-			fmt.Println("### Publish error:", err)
+			cr.log.Error("### Publish error:", err)
 		}
 	}
 }
@@ -123,11 +126,11 @@ func (cr *ChatRoom) printMessagesFrom() {
 		cm := ChatMessage{}
 		err = json.Unmarshal(msg.Data, &cm)
 		if err != nil {
-			fmt.Printf("Failed to unmarshal message: %v\n", err)
+			cr.log.Errorf("Failed to unmarshal message: %v\n", err)
 			continue
 		}
 
-		fmt.Printf("%s: %s\n", cm.SenderNick, cm.Message)
+		cr.log.Debugf("%s: %s\n", cm.SenderNick, cm.Message)
 	}
 }
 

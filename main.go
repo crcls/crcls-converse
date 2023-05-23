@@ -41,7 +41,7 @@ var (
 	nameFlag     = flag.String("name", "", "Name to use in chat. will be generated if empty")
 	relayFlag    = flag.Bool("relay", false, "Enable relay mode for this node.")
 	useRelayFlag = flag.String("use-relay", "", "Use the relay node to bypass NAT/Firewalls")
-	portFlag     = flag.Int("port", 3123, "PORT to connect on. 3123-3130")
+	portFlag     = flag.Int("port", 0, "PORT to connect on. 3123-3130")
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -84,7 +84,7 @@ func startRelay(done chan bool) {
 
 func startClient(ctx context.Context) (host.Host, error) {
 	opts := libp2p.ChainOptions(
-		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/3123"),
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag)),
 		libp2p.ProtocolVersion(ProtocolName),
 	)
 	// create a new libp2p Host that listens on a random TCP port

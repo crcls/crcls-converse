@@ -55,6 +55,8 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickna
 		return nil, err
 	}
 
+	fmt.Printf("You have now joined the %s room.\n", roomName)
+
 	// topic.EventHandler(func(t *pubsub.TopicEventHandler) error {
 	// 	evt, err := t.NextPeerEvent(context.Background())
 	// 	if err != nil {

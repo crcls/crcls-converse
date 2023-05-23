@@ -42,6 +42,7 @@ var (
 	relayFlag    = flag.Bool("relay", false, "Enable relay mode for this node.")
 	useRelayFlag = flag.String("use-relay", "", "Use the relay node to bypass NAT/Firewalls")
 	portFlag     = flag.Int("port", 0, "PORT to connect on. 3123-3130")
+	leaderFlag   = flag.Bool("leader", false, "Start this node in leader mode.")
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -177,9 +178,8 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT) {
 		select {
 		case peer := <-peers:
 			if isNewPeer(peer, h) && len(peer.ID) != 0 && len(peer.Addrs) != 0 {
-				fmt.Println(peer)
 				if err := h.Connect(ctx, peer); err != nil {
-					fmt.Println(err)
+					// fmt.Println(err)
 					dht.RoutingTable().RemovePeer(peer.ID)
 					h.Peerstore().RemovePeer(peer.ID)
 				} else {
@@ -222,10 +222,12 @@ func main() {
 		// 	panic(err)
 		// }
 
-		// join the chat room
-		_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
-		if err != nil {
-			panic(err)
+		// join the chat room if you are not a leader
+		if !*leaderFlag {
+			_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
+			if err != nil {
+				panic(err)
+			}
 		}
 
 		stop := make(chan os.Signal, 1)

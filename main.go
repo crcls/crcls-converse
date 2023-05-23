@@ -202,9 +202,20 @@ func main() {
 		h, _ := startClient(ctx)
 		dht := initDHT(ctx, h)
 
-		if !*leaderFlag {
-			go discoverPeers(ctx, h, dht, conChan)
+		ps, err := pubsub.NewGossipSub(ctx, h)
+		if err != nil {
+			panic(err)
 		}
+
+		if *leaderFlag {
+			// initialize the chat rooms
+			// TODO: get a persisted list of rooms from somewhere
+			if _, err := ps.Join("crcls-global"); err != nil {
+				panic(err)
+			}
+		}
+
+		go discoverPeers(ctx, h, dht, conChan)
 
 		// setup local mDNS discovery
 		// if err := setupLocalDiscovery(h); err != nil {
@@ -213,14 +224,12 @@ func main() {
 
 		select {
 		case <-conChan:
-			// create a new PubSub service using the GossipSub router
-			ps, err := pubsub.NewGossipSub(ctx, h)
-			if err != nil {
-				panic(err)
-			}
-			_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
-			if err != nil {
-				panic(err)
+			if !*leaderFlag {
+				// create a new PubSub service using the GossipSub router
+				_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room)
+				if err != nil {
+					panic(err)
+				}
 			}
 		case <-ctx.Done():
 			h.Peerstore().ClearAddrs(h.ID())

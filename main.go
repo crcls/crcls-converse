@@ -156,11 +156,14 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 		panic(err)
 	}
 
+	log.Info("Discovering peers...")
+
 	connected := false
 	for !connected {
 		select {
 		case peer := <-peers:
 			if isNewPeer(peer, h) && len(peer.ID) != 0 && len(peer.Addrs) != 0 {
+				log.Debug(peer)
 				if err := h.Connect(ctx, peer); err != nil {
 					log.Error(err)
 					dht.RoutingTable().RemovePeer(peer.ID)
@@ -225,6 +228,7 @@ func main() {
 		select {
 		case <-conChan:
 			if !*leaderFlag {
+				log.Debug("Joining the chat room...")
 				// create a new PubSub service using the GossipSub router
 				_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log)
 				if err != nil {

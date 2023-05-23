@@ -187,8 +187,6 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 				log.Debug(peer)
 				if err := h.Connect(ctx, peer); err != nil {
 					log.Warn(err)
-					// dht.RoutingTable().RemovePeer(peer.ID)
-					// h.Peerstore().RemovePeer(peer.ID)
 				} else {
 					log.Infof("Connected to %s\n", peer.ID)
 					connected = true

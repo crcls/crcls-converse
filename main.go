@@ -182,19 +182,11 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 func main() {
 	flag.Parse()
 
-	var lvl logging.LogLevel
-
-	var err error
 	if *verboseFlag {
-		lvl, err = logging.LevelFromString("debug")
+		logging.SetLogLevel("crcls", "debug")
 	} else {
-		lvl, err = logging.LevelFromString("error")
+		logging.SetLogLevel("crcls", "panic")
 	}
-
-	if err != nil {
-		panic(err)
-	}
-	logging.SetAllLoggers(lvl)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	room := fmt.Sprintf("crcls-%s", *roomFlag)

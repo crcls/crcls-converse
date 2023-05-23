@@ -188,7 +188,7 @@ func main() {
 	if *verboseFlag {
 		lvl, err = logging.LevelFromString("debug")
 	} else {
-		lvl, err = logging.LevelFromString("info")
+		lvl, err = logging.LevelFromString("error")
 	}
 
 	if err != nil {

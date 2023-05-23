@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"sync"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
+	crypto "github.com/libp2p/go-libp2p/core/crypto"
 
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
@@ -21,7 +24,7 @@ import (
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 
-	"github.com/libp2p/go-libp2p/core/discovery"
+	// "github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -44,14 +47,16 @@ var (
 	relayFlag    = flag.Bool("relay", false, "Enable relay mode for this node.")
 	useRelayFlag = flag.String("r", "", "AddrInfo Use the relay node to bypass NAT/Firewalls")
 	portFlag     = flag.Int("p", 0, "PORT to connect on. 3123-3130")
-	leaderFlag   = flag.Bool("leader", false, "Start this node in leader mode.")
+	isLeaderFlag = flag.Bool("leader", false, "Start this node in leader mode.")
+	leaderFlag   = flag.String("l", "", "Connect to a known leader")
 	verboseFlag  = flag.Bool("v", false, "Verbose output")
 )
 
 var log = logging.Logger("crcls")
 
 func startRelay() {
-	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
+	identity := getIdentity("./crcls_keyfile.pem")
+	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"), identity)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create the relay host: %v\n", err))
 	}
@@ -68,9 +73,12 @@ func startRelay() {
 }
 
 func startClient(ctx context.Context) (host.Host, error) {
+	identity := getIdentity("./crcls_keyfile.pem")
+
 	opts := libp2p.ChainOptions(
 		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag)),
 		libp2p.ProtocolVersion(ProtocolName),
+		identity,
 	)
 	// create a new libp2p Host that listens on a random TCP port
 	h, err := libp2p.New(opts)
@@ -87,6 +95,20 @@ func startClient(ctx context.Context) (host.Host, error) {
 
 		if err := h.Connect(ctx, relayAddr); err != nil {
 			log.Errorf("Failed to connnect to the relay: %v\n", err)
+			return nil, err
+		}
+	}
+
+	if *leaderFlag != "" {
+		leaderAddr := peer.AddrInfo{}
+
+		if err := json.Unmarshal([]byte(*leaderFlag), &leaderAddr); err != nil {
+			log.Errorf("Failed to unmarshal the leader node details: %v\n", err)
+			return nil, err
+		}
+
+		if err := h.Connect(ctx, leaderAddr); err != nil {
+			log.Errorf("Failed to connnect to the leader: %v\n", err)
 			return nil, err
 		}
 	}
@@ -149,37 +171,72 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
 
 	// Let others know we are available to join for one minute.
-	dutil.Advertise(ctx, routingDiscovery, ProtocolName, discovery.TTL(time.Minute))
-
-	peers, err := routingDiscovery.FindPeers(ctx, ProtocolName)
-	if err != nil {
-		panic(err)
-	}
+	dutil.Advertise(ctx, routingDiscovery, ProtocolName)
 
 	log.Info("Discovering peers...")
 
 	connected := false
 	for !connected {
-		select {
-		case peer := <-peers:
+		peers, err := dutil.FindPeers(ctx, routingDiscovery, ProtocolName)
+		if err != nil {
+			panic(err)
+		}
+
+		for _, peer := range peers {
 			if isNewPeer(peer, h) && len(peer.ID) != 0 && len(peer.Addrs) != 0 {
 				log.Debug(peer)
 				if err := h.Connect(ctx, peer); err != nil {
-					log.Error(err)
-					dht.RoutingTable().RemovePeer(peer.ID)
-					h.Peerstore().RemovePeer(peer.ID)
+					log.Warn(err)
+					// dht.RoutingTable().RemovePeer(peer.ID)
+					// h.Peerstore().RemovePeer(peer.ID)
 				} else {
 					log.Infof("Connected to %s\n", peer.ID)
 					connected = true
 					conChan <- true
 				}
 			}
-		case <-ctx.Done():
-			return
 		}
 	}
 
 	log.Info("Connected to CRCLS")
+}
+
+func getIdentity(keyFile string) libp2p.Option {
+	var priv crypto.PrivKey
+	var err error
+	if _, err = os.Stat(keyFile); os.IsNotExist(err) {
+		// Key file does not exist, create a new one
+		priv, _, err = crypto.GenerateEd25519Key(rand.Reader)
+		if err != nil {
+			panic(err)
+		}
+
+		// save the private key to file
+		keyBytes, err := crypto.MarshalPrivateKey(priv)
+		if err != nil {
+			panic(err)
+		}
+		err = ioutil.WriteFile(keyFile, keyBytes, 0600)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		// Load key from file
+		keyBytes, err := ioutil.ReadFile(keyFile)
+		if err != nil {
+			panic(err)
+		}
+		priv, err = crypto.UnmarshalPrivateKey(keyBytes)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	if priv != nil {
+		return libp2p.Identity(priv)
+	}
+
+	return nil
 }
 
 func main() {
@@ -201,13 +258,14 @@ func main() {
 	} else {
 		h, _ := startClient(ctx)
 		dht := initDHT(ctx, h)
+		log.Debug(h.Network().Peers())
 
 		ps, err := pubsub.NewGossipSub(ctx, h)
 		if err != nil {
 			panic(err)
 		}
 
-		if *leaderFlag {
+		if *isLeaderFlag {
 			// initialize the chat rooms
 			// TODO: get a persisted list of rooms from somewhere
 			global, err := ps.Join("crcls-global")
@@ -217,6 +275,15 @@ func main() {
 			if _, err := global.Subscribe(); err != nil {
 				panic(err)
 			}
+
+			log.Debug(ps.GetTopics())
+
+			json, err := json.Marshal(host.InfoFromHost(h))
+			if err != nil {
+				panic(fmt.Sprintf("Failed to marshal Leader AddrInfo: %v\n", err))
+			}
+
+			fmt.Printf("Leader: %s\n", string(json))
 		}
 
 		go discoverPeers(ctx, h, dht, conChan)
@@ -227,7 +294,7 @@ func main() {
 		// }
 		select {
 		case <-conChan:
-			if !*leaderFlag {
+			if !*isLeaderFlag {
 				log.Debug("Joining the chat room...")
 				// create a new PubSub service using the GossipSub router
 				_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log)

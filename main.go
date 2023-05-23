@@ -124,7 +124,7 @@ func startClient(ctx context.Context) (host.Host, error) {
 }
 
 func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
-	dht, err := kaddht.New(ctx, h)
+	dht, err := kaddht.New(ctx, h, kaddht.ProtocolPrefix("/crcls"))
 	if err != nil {
 		panic(err)
 	}
@@ -133,15 +133,14 @@ func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
 		panic(err)
 	}
 	var wg sync.WaitGroup
-	for _, peerAddr := range kaddht.DefaultBootstrapPeers {
-		peerinfo, _ := peer.AddrInfoFromP2pAddr(peerAddr)
+	for _, peerAddr := range kaddht.GetDefaultBootstrapPeerAddrInfos() {
 		wg.Add(1)
-		go func() {
+		go func(p peer.AddrInfo) {
 			defer wg.Done()
-			if err := h.Connect(ctx, *peerinfo); err != nil {
+			if err := h.Connect(ctx, p); err != nil {
 				log.Warn("Bootstrap warning:", err)
 			}
-		}()
+		}(peerAddr)
 	}
 	wg.Wait()
 
@@ -270,7 +269,6 @@ func main() {
 		}
 
 		if *isLeaderFlag {
-			log.Debug(ps.GetTopics())
 			// initialize the chat rooms
 			// TODO: get a persisted list of rooms from somewhere
 			global, err := ps.Join("crcls-global")
@@ -281,6 +279,8 @@ func main() {
 			if _, err := global.Subscribe(); err != nil {
 				panic(err)
 			}
+
+			log.Debug("Connected to: ", ps.GetTopics())
 
 			json, err := json.Marshal(host.InfoFromHost(h))
 			if err != nil {

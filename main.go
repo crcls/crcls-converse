@@ -15,6 +15,7 @@ import (
 
 	logging "github.com/ipfs/go-log/v2"
 	crypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/discovery"
 
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
@@ -144,7 +145,7 @@ func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
 	}
 	wg.Wait()
 
-	log.Info("Connected to the DHT")
+	log.Debug("Connected to the DHT")
 
 	return dht
 }
@@ -171,26 +172,32 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
 
 	// Let others know we are available to join for one minute.
-	dutil.Advertise(ctx, routingDiscovery, ProtocolName)
+	dutil.Advertise(ctx, routingDiscovery, ProtocolName, discovery.TTL(time.Minute*10))
 
 	log.Info("Discovering peers...")
 
+	peers, err := routingDiscovery.FindPeers(ctx, ProtocolName)
+	if err != nil {
+		panic(err)
+	}
+
 	connected := false
 	for !connected {
-		peers, err := dutil.FindPeers(ctx, routingDiscovery, ProtocolName)
-		if err != nil {
-			panic(err)
-		}
-
-		for _, peer := range peers {
-			if isNewPeer(peer, h) && len(peer.ID) != 0 && len(peer.Addrs) != 0 {
-				log.Debug(peer)
-				if err := h.Connect(ctx, peer); err != nil {
-					log.Warn(err)
-				} else {
-					log.Infof("Connected to %s\n", peer.ID)
-					connected = true
-					conChan <- true
+		for peer := range peers {
+			if len(peer.ID) != 0 && len(peer.Addrs) != 0 {
+				if isNewPeer(peer, h) {
+					log.Debug(peer)
+					if err := h.Connect(ctx, peer); err != nil {
+						log.Warn(err)
+					} else {
+						log.Infof("Connected to %s\n", peer.ID)
+						connected = true
+						conChan <- true
+					}
+				} else if peer.ID != h.ID() {
+					log.Debug(peer)
+					h.Peerstore().RemovePeer(peer.ID)
+					dht.RoutingTable().RemovePeer(peer.ID)
 				}
 			}
 		}
@@ -256,7 +263,6 @@ func main() {
 	} else {
 		h, _ := startClient(ctx)
 		dht := initDHT(ctx, h)
-		log.Debug(h.Network().Peers())
 
 		ps, err := pubsub.NewGossipSub(ctx, h)
 		if err != nil {
@@ -264,17 +270,17 @@ func main() {
 		}
 
 		if *isLeaderFlag {
+			log.Debug(ps.GetTopics())
 			// initialize the chat rooms
 			// TODO: get a persisted list of rooms from somewhere
 			global, err := ps.Join("crcls-global")
 			if err != nil {
 				panic(err)
 			}
+
 			if _, err := global.Subscribe(); err != nil {
 				panic(err)
 			}
-
-			log.Debug(ps.GetTopics())
 
 			json, err := json.Marshal(host.InfoFromHost(h))
 			if err != nil {

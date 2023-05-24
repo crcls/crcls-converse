@@ -98,6 +98,13 @@ func startClient(ctx context.Context) (host.Host, error) {
 			log.Errorf("Failed to connnect to the relay: %v\n", err)
 			return nil, err
 		}
+
+		h.SetStreamHandler(ProtocolName, func(s network.Stream) {
+			log.Debug("Awesome! We're now communicating via the relay!")
+
+			// End the example
+			s.Close()
+		})
 	}
 
 	if *leaderFlag != "" {
@@ -139,6 +146,8 @@ func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
 			defer wg.Done()
 			if err := h.Connect(ctx, p); err != nil {
 				log.Warn("Bootstrap warning:", err)
+			} else {
+				log.Debugf("Connected to Bootstrap peer: %s", p.ID)
 			}
 		}(peerAddr)
 	}

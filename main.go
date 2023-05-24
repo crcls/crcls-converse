@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -58,7 +59,7 @@ var log = logging.Logger("crcls")
 
 func startRelay() {
 	identity := getIdentity("./crcls_keyfile.pem")
-	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"), identity)
+	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"), libp2p.Identity(identity), libp2p.EnableRelayService())
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create the relay host: %v\n", err))
 	}
@@ -76,35 +77,56 @@ func startRelay() {
 
 func startClient(ctx context.Context) (host.Host, error) {
 	identity := getIdentity("./crcls_keyfile.pem")
+	listenOpt := libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag))
 
 	opts := libp2p.ChainOptions(
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag)),
 		libp2p.ProtocolVersion(ProtocolName),
-		identity,
+		libp2p.Identity(identity),
 	)
-	// create a new libp2p Host that listens on a random TCP port
-	h, err := libp2p.New(opts)
-	if err != nil {
-		panic(err)
-	}
+
+	var h host.Host
+	var err error
 
 	if *useRelayFlag != "" {
 		relayAddr := peer.AddrInfo{}
-		if err := json.Unmarshal([]byte(*useRelayFlag), &relayAddr); err != nil {
-			log.Errorf("Failed to unmarshal the relay node details: %v\n", err)
+		if err = json.Unmarshal([]byte(*useRelayFlag), &relayAddr); err != nil {
+			log.Errorf("Failed to unmarshal the relay node details: %v", err)
 			return nil, err
 		}
 
-		if err := h.Connect(ctx, relayAddr); err != nil {
-			log.Errorf("Failed to connnect to the relay: %v\n", err)
-			return nil, err
+		hostId, err := peer.IDFromPrivateKey(identity)
+		if err != nil {
+			panic(err)
 		}
 
-		reservation, err := client.Reserve(context.Background(), h, relayAddr)
+		log.Debug("Host ID: ", hostId.String())
+
+		relayHostAddr := filepath.Join(relayAddr.Addrs[len(relayAddr.Addrs)-1].String(), "p2p", relayAddr.ID.String(), "p2p-circuit", "p2p", hostId.String())
+		log.Debug("RelayHostMultiAddr: ", relayHostAddr)
+
+		listenOpt = libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag), relayHostAddr)
+		// create a new libp2p Host that listens on a random TCP port
+		h, err = libp2p.New(opts, listenOpt)
+		if err != nil {
+			panic(err)
+		}
+
+		// TODO: handle reservation expiration
+		reservation, err := client.Reserve(ctx, h, relayAddr)
 		if err != nil {
 			log.Errorf("Host failed to receive a relay reservation. %v", err)
 		} else {
-			log.Debugf("%+v", reservation)
+			log.Debugf("Relay Reservation: %+v", reservation)
+		}
+
+		if err := h.Connect(ctx, relayAddr); err != nil {
+			log.Errorf("Failed to connnect to the relay: %v", err)
+			return nil, err
+		}
+	} else {
+		h, err = libp2p.New(opts, listenOpt)
+		if err != nil {
+			panic(err)
 		}
 	}
 
@@ -112,21 +134,21 @@ func startClient(ctx context.Context) (host.Host, error) {
 		leaderAddr := peer.AddrInfo{}
 
 		if err := json.Unmarshal([]byte(*leaderFlag), &leaderAddr); err != nil {
-			log.Errorf("Failed to unmarshal the leader node details: %v\n", err)
+			log.Errorf("Failed to unmarshal the leader node details: %v", err)
 			return nil, err
 		}
 
 		if err := h.Connect(ctx, leaderAddr); err != nil {
-			log.Errorf("Failed to connnect to the leader: %v\n", err)
+			log.Errorf("Failed to connnect to the leader: %v", err)
 			return nil, err
 		}
 	}
 
 	// h.SetStreamHandler(protocol.ID(protocolName), handleStream)
 
-	log.Infof("host created. we are %s\n", h.ID())
-	log.Infof("addrs: %v\n", h.Addrs())
-	log.Infof("peers: %v\n", h.Network().Peers())
+	log.Infof("host created. we are %s", h.ID())
+	log.Infof("addrs: %v", h.Addrs())
+	log.Infof("peers: %v", h.Network().Peers())
 
 	return h, nil
 }
@@ -200,7 +222,7 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 					if err := h.Connect(ctx, peer); err != nil {
 						log.Warn(err)
 					} else {
-						log.Infof("Connected to %s\n", peer.ID)
+						log.Infof("Connected to %s", peer.ID)
 						connected = true
 						conChan <- true
 					}
@@ -216,7 +238,7 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 	log.Info("Connected to CRCLS")
 }
 
-func getIdentity(keyFile string) libp2p.Option {
+func getIdentity(keyFile string) crypto.PrivKey {
 	var priv crypto.PrivKey
 	var err error
 	if _, err = os.Stat(keyFile); os.IsNotExist(err) {
@@ -247,11 +269,7 @@ func getIdentity(keyFile string) libp2p.Option {
 		}
 	}
 
-	if priv != nil {
-		return libp2p.Identity(priv)
-	}
-
-	return nil
+	return priv
 }
 
 func main() {

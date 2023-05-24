@@ -100,15 +100,11 @@ func startClient(ctx context.Context) (host.Host, error) {
 			return nil, err
 		}
 
-		h.SetStreamHandler(ProtocolName, func(s network.Stream) {
-			log.Debug("Awesome! We're now communicating via the relay!")
-
-			// End the example
-			s.Close()
-		})
-
-		if _, err = client.Reserve(context.Background(), h, relayAddr); err != nil {
+		reservation, err := client.Reserve(context.Background(), h, relayAddr)
+		if err != nil {
 			log.Errorf("Host failed to receive a relay reservation. %v", err)
+		} else {
+			log.Debugf("%+v", reservation)
 		}
 	}
 
@@ -141,9 +137,6 @@ func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
 		panic(err)
 	}
 
-	if err = dht.Bootstrap(ctx); err != nil {
-		panic(err)
-	}
 	var wg sync.WaitGroup
 	for _, peerAddr := range kaddht.GetDefaultBootstrapPeerAddrInfos() {
 		wg.Add(1)
@@ -157,6 +150,10 @@ func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
 		}(peerAddr)
 	}
 	wg.Wait()
+
+	if err = dht.Bootstrap(ctx); err != nil {
+		panic(err)
+	}
 
 	log.Debug("Connected to the DHT")
 
@@ -191,12 +188,12 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 
 	connected := false
 	for !connected {
-		peers, err := dutil.FindPeers(ctx, routingDiscovery, ProtocolName)
+		peers, err := routingDiscovery.FindPeers(ctx, ProtocolName)
 		if err != nil {
 			panic(err)
 		}
 
-		for _, peer := range peers {
+		for peer := range peers {
 			if len(peer.ID) != 0 && len(peer.Addrs) != 0 {
 				if isNewPeer(peer, h) {
 					log.Debug(peer)

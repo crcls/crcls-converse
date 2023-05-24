@@ -23,6 +23,7 @@ import (
 
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 
 	// "github.com/libp2p/go-libp2p/core/discovery"
@@ -105,6 +106,10 @@ func startClient(ctx context.Context) (host.Host, error) {
 			// End the example
 			s.Close()
 		})
+
+		if _, err = client.Reserve(context.Background(), h, relayAddr); err != nil {
+			log.Errorf("unreachable2 failed to receive a relay reservation from relay1. %v", err)
+		}
 	}
 
 	if *leaderFlag != "" {

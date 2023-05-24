@@ -108,7 +108,7 @@ func startClient(ctx context.Context) (host.Host, error) {
 		})
 
 		if _, err = client.Reserve(context.Background(), h, relayAddr); err != nil {
-			log.Errorf("unreachable2 failed to receive a relay reservation from relay1. %v", err)
+			log.Errorf("Host failed to receive a relay reservation. %v", err)
 		}
 	}
 
@@ -184,19 +184,19 @@ func isNewPeer(p peer.AddrInfo, h host.Host) bool {
 func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conChan chan bool) {
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
 
-	// Let others know we are available to join for one minute.
+	// Let others know we are available to join for ten minutes.
 	dutil.Advertise(ctx, routingDiscovery, ProtocolName, discovery.TTL(time.Minute*10))
 
 	log.Info("Discovering peers...")
 
-	peers, err := routingDiscovery.FindPeers(ctx, ProtocolName)
-	if err != nil {
-		panic(err)
-	}
-
 	connected := false
 	for !connected {
-		for peer := range peers {
+		peers, err := dutil.FindPeers(ctx, routingDiscovery, ProtocolName)
+		if err != nil {
+			panic(err)
+		}
+
+		for _, peer := range peers {
 			if len(peer.ID) != 0 && len(peer.Addrs) != 0 {
 				if isNewPeer(peer, h) {
 					log.Debug(peer)

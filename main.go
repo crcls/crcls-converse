@@ -9,7 +9,8 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
-	"path/filepath"
+
+	// "path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -17,6 +18,7 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 	crypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/discovery"
+	"github.com/libp2p/go-libp2p/core/protocol"
 
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
@@ -24,7 +26,8 @@ import (
 
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
-	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
+
+	// "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 
 	// "github.com/libp2p/go-libp2p/core/discovery"
@@ -97,28 +100,28 @@ func startClient(ctx context.Context) (host.Host, error) {
 
 		log.Debug("Host ID: ", hostId.String())
 
-		relayHostAddr := filepath.Join(relayAddr.Addrs[len(relayAddr.Addrs)-1].String(), "p2p", relayAddr.ID.String(), "p2p-circuit", "p2p", hostId.String())
-		log.Debug("RelayHostMultiAddr: ", relayHostAddr)
+		// relayHostAddr := filepath.Join(relayAddr.Addrs[len(relayAddr.Addrs)-1].String(), "p2p", relayAddr.ID.String(), "p2p-circuit", "p2p", hostId.String())
+		// log.Debug("RelayHostMultiAddr: ", relayHostAddr)
 
-		listenOpt = libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag), relayHostAddr)
+		// listenOpt = libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag), relayHostAddr)
 		// create a new libp2p Host that listens on a random TCP port
 		h, err = libp2p.New(opts, listenOpt)
 		if err != nil {
 			panic(err)
 		}
 
-		// TODO: handle reservation expiration
-		reservation, err := client.Reserve(ctx, h, relayAddr)
-		if err != nil {
-			log.Errorf("Host failed to receive a relay reservation. %v", err)
-		} else {
-			log.Debugf("Relay Reservation: %+v", reservation)
-		}
+		// if err := h.Connect(ctx, relayAddr); err != nil {
+		// 	log.Errorf("Failed to connnect to the relay: %v", err)
+		// 	return nil, err
+		// }
 
-		if err := h.Connect(ctx, relayAddr); err != nil {
-			log.Errorf("Failed to connnect to the relay: %v", err)
-			return nil, err
-		}
+		// // TODO: handle reservation expiration
+		// reservation, err := client.Reserve(ctx, h, relayAddr)
+		// if err != nil {
+		// 	log.Errorf("Host failed to receive a relay reservation. %v", err)
+		// } else {
+		// 	log.Debugf("Relay Reservation: %+v", reservation)
+		// }
 	} else {
 		h, err = libp2p.New(opts, listenOpt)
 		if err != nil {
@@ -140,7 +143,7 @@ func startClient(ctx context.Context) (host.Host, error) {
 		}
 	}
 
-	// h.SetStreamHandler(protocol.ID(protocolName), handleStream)
+	h.SetStreamHandler(protocol.ID(ProtocolName), handleStream)
 
 	log.Infof("host created. we are %s", h.ID())
 	log.Infof("addrs: %v", h.Addrs())
@@ -227,6 +230,7 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 		for peer := range peers {
 			if len(peer.ID) != 0 && len(peer.Addrs) != 0 {
 				if isNewPeer(peer, h) {
+					log.Debug(peer)
 					if err := h.Connect(ctx, peer); err != nil {
 						log.Warn(err)
 					} else {

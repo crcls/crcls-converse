@@ -9,8 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
-
-	// "path/filepath"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -100,10 +99,10 @@ func startClient(ctx context.Context) (host.Host, error) {
 
 		log.Debug("Host ID: ", hostId.String())
 
-		// relayHostAddr := filepath.Join(relayAddr.Addrs[len(relayAddr.Addrs)-1].String(), "p2p", relayAddr.ID.String(), "p2p-circuit", "p2p", hostId.String())
-		// log.Debug("RelayHostMultiAddr: ", relayHostAddr)
+		relayHostAddr := filepath.Join(relayAddr.Addrs[len(relayAddr.Addrs)-1].String(), "p2p", relayAddr.ID.String(), "p2p-circuit", "p2p", hostId.String())
+		log.Debug("RelayHostMultiAddr: ", relayHostAddr)
 
-		// listenOpt = libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag), relayHostAddr)
+		listenOpt = libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag), relayHostAddr)
 		// create a new libp2p Host that listens on a random TCP port
 		h, err = libp2p.New(opts, listenOpt)
 		if err != nil {
@@ -303,7 +302,7 @@ func main() {
 
 	if *relayFlag {
 		startRelay(h)
-	} else {
+	} else if !*isLeaderFlag {
 		go discoverPeers(ctx, h, dht, conChan)
 	}
 
@@ -350,6 +349,9 @@ func main() {
 				fmt.Println(err)
 				cancel()
 				os.Exit(1)
+			case <-stop:
+				cancel()
+				os.Exit(0)
 			}
 		}
 	case <-ctx.Done():

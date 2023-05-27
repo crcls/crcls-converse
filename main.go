@@ -57,12 +57,7 @@ var (
 
 var log = logging.Logger("crcls")
 
-func startRelay() {
-	identity := getIdentity("./crcls_keyfile.pem")
-	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"), libp2p.Identity(identity), libp2p.EnableRelayService())
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create the relay host: %v\n", err))
-	}
+func startRelay(h host.Host) {
 	if _, err := relay.New(h); err != nil {
 		panic(fmt.Sprintf("Failed to instantiate the relay: %v\n", err))
 	}
@@ -219,13 +214,13 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 			if len(peer.ID) != 0 && len(peer.Addrs) != 0 {
 				if isNewPeer(peer, h) {
 					log.Debug(peer)
-					if err := h.Connect(ctx, peer); err != nil {
-						log.Warn(err)
-					} else {
-						log.Infof("Connected to %s", peer.ID)
-						connected = true
-						conChan <- true
-					}
+					// if err := h.Connect(ctx, peer); err != nil {
+					// 	log.Warn(err)
+					// } else {
+					// 	log.Infof("Connected to %s", peer.ID)
+					// 	connected = true
+					// 	conChan <- true
+					// }
 				} else if peer.ID != h.ID() {
 					log.Debug(peer)
 					h.Peerstore().RemovePeer(peer.ID)
@@ -286,73 +281,69 @@ func main() {
 
 	conChan := make(chan bool, 1)
 
-	if *relayFlag {
-		startRelay()
-	} else {
-		h, _ := startClient(ctx)
-		dht := initDHT(ctx, h)
+	h, _ := startClient(ctx)
+	dht := initDHT(ctx, h)
 
-		ps, err := pubsub.NewGossipSub(ctx, h)
+	if *relayFlag {
+		startRelay(h)
+	}
+
+	ps, err := pubsub.NewGossipSub(ctx, h)
+	if err != nil {
+		panic(err)
+	}
+
+	if *isLeaderFlag {
+		// initialize the chat rooms
+		// TODO: get a persisted list of rooms from somewhere
+		global, err := ps.Join("crcls-global")
 		if err != nil {
 			panic(err)
 		}
 
-		if *isLeaderFlag {
-			// initialize the chat rooms
-			// TODO: get a persisted list of rooms from somewhere
-			global, err := ps.Join("crcls-global")
-			if err != nil {
-				panic(err)
-			}
-
-			if _, err := global.Subscribe(); err != nil {
-				panic(err)
-			}
-
-			log.Debug("Connected to: ", ps.GetTopics())
-
-			json, err := json.Marshal(host.InfoFromHost(h))
-			if err != nil {
-				panic(fmt.Sprintf("Failed to marshal Leader AddrInfo: %v\n", err))
-			}
-
-			fmt.Printf("Leader: %s\n", string(json))
+		if _, err := global.Subscribe(); err != nil {
+			panic(err)
 		}
 
-		go discoverPeers(ctx, h, dht, conChan)
+		log.Debug("Connected to: ", ps.GetTopics())
 
-		// setup local mDNS discovery
-		// if err := setupLocalDiscovery(h); err != nil {
-		// 	panic(err)
-		// }
-		select {
-		case <-conChan:
-			if !*isLeaderFlag {
-				log.Debug("Joining the chat room...")
-				// create a new PubSub service using the GossipSub router
-				_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log)
-				if err != nil {
-					panic(err)
-				}
-			}
-		case <-ctx.Done():
-			h.Peerstore().ClearAddrs(h.ID())
-			h.Peerstore().RemovePeer(h.ID())
-			h.Close()
+		json, err := json.Marshal(host.InfoFromHost(h))
+		if err != nil {
+			panic(fmt.Sprintf("Failed to marshal Leader AddrInfo: %v\n", err))
 		}
+
+		fmt.Printf("Leader: %s\n", string(json))
 	}
+
+	go discoverPeers(ctx, h, dht, conChan)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT)
 
 	select {
+	case <-conChan:
+		if !*isLeaderFlag {
+			log.Debug("Joining the chat room...")
+			// create a new PubSub service using the GossipSub router
+			_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log)
+			if err != nil {
+				panic(err)
+			}
+		}
+	case <-ctx.Done():
+		h.Peerstore().ClearAddrs(h.ID())
+		h.Peerstore().RemovePeer(h.ID())
+		h.Close()
 	case <-stop:
 		cancel()
 		os.Exit(0)
-
 	}
 }
 
+// setup local mDNS discovery
+// if err := setupLocalDiscovery(h); err != nil {
+// 	panic(err)
+// }
 // setupDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
 // func setupLocalDiscovery(h host.Host) error {

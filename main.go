@@ -211,7 +211,7 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 		}
 
 		for peer := range peers {
-			if len(peer.ID) != 0 && len(peer.Addrs) != 0 {
+			if len(peer.ID) != 0 && len(peer.Addrs) != 0 && peer.ID != h.ID() {
 				log.Debug(peer)
 				if isNewPeer(peer, h) {
 					// if err := h.Connect(ctx, peer); err != nil {

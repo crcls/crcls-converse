@@ -199,13 +199,13 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
 
 	// Let others know we are available to join for ten minutes.
-	dutil.Advertise(ctx, routingDiscovery, ProtocolName, discovery.TTL(time.Minute*10))
+	dutil.Advertise(ctx, routingDiscovery, "crcls", discovery.TTL(time.Minute*10))
 
 	log.Info("Discovering peers...")
 
 	connected := false
 	for !connected {
-		peers, err := routingDiscovery.FindPeers(ctx, ProtocolName)
+		peers, err := routingDiscovery.FindPeers(ctx, "crcls")
 		if err != nil {
 			panic(err)
 		}
@@ -322,7 +322,7 @@ func main() {
 
 	select {
 	case <-conChan:
-		if !*isLeaderFlag {
+		if !*isLeaderFlag || !*relayFlag {
 			log.Debug("Joining the chat room...")
 			// create a new PubSub service using the GossipSub router
 			_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log)

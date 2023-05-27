@@ -201,7 +201,7 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 	// Let others know we are available to join for ten minutes.
 	dutil.Advertise(ctx, routingDiscovery, "crcls", discovery.TTL(time.Minute*10))
 
-	log.Info("Discovering peers...")
+	log.Info("Discovering peers on crcls...")
 
 	connected := false
 	for !connected {
@@ -212,8 +212,8 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 
 		for peer := range peers {
 			if len(peer.ID) != 0 && len(peer.Addrs) != 0 {
+				log.Debug(peer)
 				if isNewPeer(peer, h) {
-					log.Debug(peer)
 					// if err := h.Connect(ctx, peer); err != nil {
 					// 	log.Warn(err)
 					// } else {

@@ -34,6 +34,7 @@ import (
 	// "github.com/libp2p/go-libp2p/core/peerstore"
 	// "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	// "github.com/multiformats/go-multiaddr"
+	// flatfs "github.com/ipfs/go-ds-flatfs"
 )
 
 // DiscoveryInterval is how often we re-publish our mDNS records.
@@ -149,7 +150,20 @@ func startClient(ctx context.Context) (host.Host, error) {
 }
 
 func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
-	dht, err := kaddht.New(ctx, h, kaddht.ProtocolPrefix("/crcls"))
+	var dht *kaddht.IpfsDHT
+	var err error
+	// ds, err := flatfs.CreateOrOpen("./", flatfs.Prefix(1), true)
+
+	if err != nil {
+		panic(err)
+	}
+
+	if *relayFlag {
+		dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeServer))
+	} else {
+		dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeClient))
+	}
+
 	if err != nil {
 		panic(err)
 	}
@@ -211,16 +225,15 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 		}
 
 		for peer := range peers {
-			if len(peer.ID) != 0 && len(peer.Addrs) != 0 && peer.ID != h.ID() {
-				log.Debug(peer)
+			if len(peer.ID) != 0 && len(peer.Addrs) != 0 {
 				if isNewPeer(peer, h) {
-					// if err := h.Connect(ctx, peer); err != nil {
-					// 	log.Warn(err)
-					// } else {
-					// 	log.Infof("Connected to %s", peer.ID)
-					// 	connected = true
-					// 	conChan <- true
-					// }
+					if err := h.Connect(ctx, peer); err != nil {
+						log.Warn(err)
+					} else {
+						log.Infof("Connected to %s", peer.ID)
+						connected = true
+						conChan <- true
+					}
 				} else if peer.ID != h.ID() {
 					log.Debug(peer)
 					h.Peerstore().RemovePeer(peer.ID)
@@ -286,6 +299,8 @@ func main() {
 
 	if *relayFlag {
 		startRelay(h)
+	} else {
+		go discoverPeers(ctx, h, dht, conChan)
 	}
 
 	ps, err := pubsub.NewGossipSub(ctx, h)
@@ -314,8 +329,6 @@ func main() {
 
 		fmt.Printf("Leader: %s\n", string(json))
 	}
-
-	go discoverPeers(ctx, h, dht, conChan)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT)

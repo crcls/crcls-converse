@@ -23,6 +23,7 @@ const ChatRoomBufSize = 128
 type ChatRoom struct {
 	// Messages is a channel of messages received from other peers in the chat room
 	Messages chan *ChatMessage
+	Errors   chan error
 
 	ctx   context.Context
 	ps    *pubsub.PubSub
@@ -31,7 +32,7 @@ type ChatRoom struct {
 
 	roomName string
 	self     peer.ID
-	nick     string
+	name     string
 	log      *logging.ZapEventLogger
 }
 
@@ -44,17 +45,17 @@ type ChatMessage struct {
 
 // JoinChatRoom tries to subscribe to the PubSub topic for the room name, returning
 // a ChatRoom on success.
-func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickname string, roomName string, log *logging.ZapEventLogger) (*ChatRoom, error) {
+func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, name, roomName string, log *logging.ZapEventLogger, errChan chan error) {
 	// join the pubsub topic
 	topic, err := ps.Join(roomName)
 	if err != nil {
-		return nil, err
+		errChan <- err
 	}
 
 	// and subscribe to it
 	sub, err := topic.Subscribe()
 	if err != nil {
-		return nil, err
+		errChan <- err
 	}
 
 	log.Infof("You have now joined the %s room.\n", roomName)
@@ -65,17 +66,16 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickna
 		topic:    topic,
 		sub:      sub,
 		self:     selfID,
-		nick:     nickname,
+		name:     name,
 		roomName: roomName,
 		Messages: make(chan *ChatMessage, ChatRoomBufSize),
+		Errors:   errChan,
 		log:      log,
 	}
 
-	fmt.Printf("%s: ", nickname)
 	// start reading messages from the subscription in a loop
 	go cr.streamConsoleTo()
 	go cr.printMessagesFrom()
-	return cr, nil
 }
 
 // Publish sends a message to the pubsub topic.
@@ -83,7 +83,7 @@ func (cr *ChatRoom) Publish(message string) error {
 	m := ChatMessage{
 		Message:    message,
 		SenderID:   cr.self.Pretty(),
-		SenderNick: cr.nick,
+		SenderNick: cr.name,
 	}
 	cr.log.Debug("%+v\n", m)
 	msgBytes, err := json.Marshal(m)
@@ -105,6 +105,7 @@ func (cr *ChatRoom) streamConsoleTo() {
 	for {
 		s, err := reader.ReadString('\n')
 		if err != nil {
+			cr.Errors <- err
 			return
 		}
 		if err := cr.Publish(s); err != nil {
@@ -117,6 +118,7 @@ func (cr *ChatRoom) printMessagesFrom() {
 	for {
 		msg, err := cr.sub.Next(cr.ctx)
 		if err != nil {
+			cr.Errors <- err
 			return
 		}
 		// only forward messages delivered by others
@@ -127,12 +129,12 @@ func (cr *ChatRoom) printMessagesFrom() {
 		cm := ChatMessage{}
 		err = json.Unmarshal(msg.Data, &cm)
 		if err != nil {
-			cr.log.Errorf("Failed to unmarshal message: %v\n", err)
-			continue
+			cr.Errors <- err
+			return
 		}
 
 		fmt.Printf("%s: %s\n", cm.SenderNick, cm.Message)
-		fmt.Printf("%s: ", cr.nick)
+		fmt.Printf("%s: ", cr.name)
 	}
 }
 

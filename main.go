@@ -339,12 +339,17 @@ func main() {
 
 	select {
 	case <-conChan:
-		if !*isLeaderFlag || !*relayFlag {
+		if !*isLeaderFlag && !*relayFlag {
 			log.Debug("Joining the chat room...")
 			// create a new PubSub service using the GossipSub router
-			_, err = JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log)
-			if err != nil {
-				panic(err)
+			errors := make(chan error, 1)
+			JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log, errors)
+
+			select {
+			case err := <-errors:
+				fmt.Println(err)
+				cancel()
+				os.Exit(1)
 			}
 		}
 	case <-ctx.Done():

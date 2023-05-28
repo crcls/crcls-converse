@@ -234,8 +234,8 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 						dht.RoutingTable().RemovePeer(peer.ID)
 					} else {
 						log.Infof("Connected to %s", peer.ID)
-						connected = true
 						if !*isLeaderFlag {
+							connected = true
 							conChan <- true
 						}
 					}

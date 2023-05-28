@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
-	"path/filepath"
+	// "path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -99,10 +99,7 @@ func startClient(ctx context.Context) (host.Host, error) {
 
 		log.Debug("Host ID: ", hostId.String())
 
-		relayHostAddr :=
-			log.Debug("RelayHostMultiAddr: ", relayHostAddr)
-
-		listenOpt = libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag), relayHostAddr)
+		// listenOpt = libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag), relayHostAddr)
 		// create a new libp2p Host that listens on a random TCP port
 		h, err = libp2p.New(opts, listenOpt)
 		if err != nil {

@@ -163,7 +163,7 @@ func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
 	if *relayFlag {
 		dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeServer))
 	} else {
-		dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeClient))
+		dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeClient), kaddht.QueryFilter(kaddht.PublicQueryFilter))
 	}
 
 	if err != nil {
@@ -231,7 +231,9 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 				if isNewPeer(peer, h) {
 					log.Debug(peer)
 					if err := h.Connect(ctx, peer); err != nil {
-						log.Warn(err)
+						log.Debug(err)
+						h.Peerstore().RemovePeer(peer.ID)
+						dht.RoutingTable().RemovePeer(peer.ID)
 					} else {
 						log.Infof("Connected to %s", peer.ID)
 						connected = true
@@ -302,7 +304,7 @@ func main() {
 
 	if *relayFlag {
 		startRelay(h)
-	} else if !*isLeaderFlag {
+	} else {
 		go discoverPeers(ctx, h, dht, conChan)
 	}
 

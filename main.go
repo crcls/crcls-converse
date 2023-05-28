@@ -160,7 +160,7 @@ func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
 	if *relayFlag {
 		dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeServer))
 	} else {
-		dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeClient), kaddht.QueryFilter(kaddht.PublicQueryFilter))
+		dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeClient), kaddht.RoutingTableFilter(kaddht.PublicRoutingTableFilter))
 	}
 
 	if err != nil {

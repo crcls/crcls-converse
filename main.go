@@ -99,8 +99,8 @@ func startClient(ctx context.Context) (host.Host, error) {
 
 		log.Debug("Host ID: ", hostId.String())
 
-		relayHostAddr := filepath.Join(relayAddr.Addrs[len(relayAddr.Addrs)-1].String(), "p2p", relayAddr.ID.String(), "p2p-circuit", "p2p", hostId.String())
-		log.Debug("RelayHostMultiAddr: ", relayHostAddr)
+		relayHostAddr :=
+			log.Debug("RelayHostMultiAddr: ", relayHostAddr)
 
 		listenOpt = libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag), relayHostAddr)
 		// create a new libp2p Host that listens on a random TCP port
@@ -230,6 +230,7 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 			if len(peer.ID) != 0 && len(peer.Addrs) != 0 {
 				if isNewPeer(peer, h) {
 					log.Debug(peer)
+
 					if err := h.Connect(ctx, peer); err != nil {
 						log.Debug(err)
 						h.Peerstore().RemovePeer(peer.ID)
@@ -304,9 +305,9 @@ func main() {
 
 	if *relayFlag {
 		startRelay(h)
-	} else {
-		go discoverPeers(ctx, h, dht, conChan)
 	}
+
+	go discoverPeers(ctx, h, dht, conChan)
 
 	ps, err := pubsub.NewGossipSub(ctx, h)
 	if err != nil {

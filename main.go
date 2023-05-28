@@ -235,9 +235,7 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 					} else {
 						log.Infof("Connected to %s", peer.ID)
 						connected = true
-						if !*isLeaderFlag {
-							conChan <- true
-						}
+						conChan <- !*isLeaderFlag
 					}
 				} else if peer.ID != h.ID() {
 					log.Debug(peer)

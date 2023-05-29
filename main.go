@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+
 	// "path/filepath"
 	"sync"
 	"syscall"
@@ -17,14 +18,17 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 	crypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/discovery"
-	"github.com/libp2p/go-libp2p/core/protocol"
+
+	// "github.com/libp2p/go-libp2p/core/protocol"
 
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
 
 	// "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
@@ -54,7 +58,6 @@ var (
 	useRelayFlag = flag.String("r", "", "AddrInfo Use the relay node to bypass NAT/Firewalls")
 	portFlag     = flag.Int("p", 0, "PORT to connect on. 3123-3130")
 	isLeaderFlag = flag.Bool("leader", false, "Start this node in leader mode.")
-	leaderFlag   = flag.String("l", "", "Connect to a known leader")
 	verboseFlag  = flag.Bool("v", false, "Verbose output")
 )
 
@@ -75,71 +78,18 @@ func startRelay(h host.Host) {
 
 func startClient(ctx context.Context) (host.Host, error) {
 	identity := getIdentity("./crcls_keyfile.pem")
-	listenOpt := libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag))
 
 	opts := libp2p.ChainOptions(
 		libp2p.ProtocolVersion(ProtocolName),
 		libp2p.Identity(identity),
+		libp2p.Security(tls.ID, tls.New),
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag)),
 	)
 
-	var h host.Host
-	var err error
-
-	if *useRelayFlag != "" {
-		relayAddr := peer.AddrInfo{}
-		if err = json.Unmarshal([]byte(*useRelayFlag), &relayAddr); err != nil {
-			log.Errorf("Failed to unmarshal the relay node details: %v", err)
-			return nil, err
-		}
-
-		hostId, err := peer.IDFromPrivateKey(identity)
-		if err != nil {
-			panic(err)
-		}
-
-		log.Debug("Host ID: ", hostId.String())
-
-		// listenOpt = libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *portFlag), relayHostAddr)
-		// create a new libp2p Host that listens on a random TCP port
-		h, err = libp2p.New(opts, listenOpt)
-		if err != nil {
-			panic(err)
-		}
-
-		// if err := h.Connect(ctx, relayAddr); err != nil {
-		// 	log.Errorf("Failed to connnect to the relay: %v", err)
-		// 	return nil, err
-		// }
-
-		// // TODO: handle reservation expiration
-		// reservation, err := client.Reserve(ctx, h, relayAddr)
-		// if err != nil {
-		// 	log.Errorf("Host failed to receive a relay reservation. %v", err)
-		// } else {
-		// 	log.Debugf("Relay Reservation: %+v", reservation)
-		// }
-	} else {
-		h, err = libp2p.New(opts, listenOpt)
-		if err != nil {
-			panic(err)
-		}
+	h, err := libp2p.New(opts)
+	if err != nil {
+		panic(err)
 	}
-
-	if *leaderFlag != "" {
-		leaderAddr := peer.AddrInfo{}
-
-		if err := json.Unmarshal([]byte(*leaderFlag), &leaderAddr); err != nil {
-			log.Errorf("Failed to unmarshal the leader node details: %v", err)
-			return nil, err
-		}
-
-		if err := h.Connect(ctx, leaderAddr); err != nil {
-			log.Errorf("Failed to connnect to the leader: %v", err)
-			return nil, err
-		}
-	}
-
-	h.SetStreamHandler(protocol.ID(ProtocolName), handleStream)
 
 	log.Infof("host created. we are %s", h.ID())
 	log.Infof("addrs: %v", h.Addrs())
@@ -151,7 +101,7 @@ func startClient(ctx context.Context) (host.Host, error) {
 func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
 	var dht *kaddht.IpfsDHT
 	var err error
-	// ds, err := flatfs.CreateOrOpen("./", flatfs.Prefix(1), true)
+	// ds, err := flatfs.createoropen("./crcls-ds", flatfs.prefix(1), true)
 
 	if err != nil {
 		panic(err)
@@ -167,19 +117,33 @@ func initDHT(ctx context.Context, h host.Host) *kaddht.IpfsDHT {
 		panic(err)
 	}
 
-	var wg sync.WaitGroup
-	for _, peerAddr := range kaddht.GetDefaultBootstrapPeerAddrInfos() {
+	peers := kaddht.GetDefaultBootstrapPeerAddrInfos()
+
+	if *useRelayFlag != "" {
+		relayAddr := peer.AddrInfo{}
+		if err := json.Unmarshal([]byte(*useRelayFlag), &relayAddr); err != nil {
+			panic(err)
+		}
+
+		fmt.Println(relayAddr.Addrs[1])
+
+		peers = append(peers, relayAddr)
+	}
+
+	for _, peerAddr := range peers {
+		var wg sync.WaitGroup
+		fmt.Printf("%v\n", peerAddr)
 		wg.Add(1)
-		go func(p peer.AddrInfo) {
+		go func() {
 			defer wg.Done()
-			if err := h.Connect(ctx, p); err != nil {
+			if err := h.Connect(ctx, peerAddr); err != nil {
 				log.Warn("Bootstrap warning:", err)
 			} else {
-				log.Debugf("Connected to Bootstrap peer: %s", p.ID)
+				log.Debugf("Connected to Bootstrap peer: %s", peerAddr.ID)
 			}
-		}(peerAddr)
+		}()
+		wg.Wait()
 	}
-	wg.Wait()
 
 	if err = dht.Bootstrap(ctx); err != nil {
 		panic(err)
@@ -223,26 +187,26 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, conCha
 			panic(err)
 		}
 
-		for peer := range peers {
-			if len(peer.ID) != 0 && len(peer.Addrs) != 0 {
-				if isNewPeer(peer, h) {
-					log.Debug(peer)
+		for p := range peers {
+			if len(p.ID) != 0 && len(p.Addrs) != 0 {
+				if isNewPeer(p, h) {
+					log.Debug(p)
 
-					if err := h.Connect(ctx, peer); err != nil {
+					if err := h.Connect(ctx, p); err != nil {
 						log.Debug(err)
-						h.Peerstore().RemovePeer(peer.ID)
-						dht.RoutingTable().RemovePeer(peer.ID)
+						h.Peerstore().RemovePeer(p.ID)
+						dht.RoutingTable().RemovePeer(p.ID)
 					} else {
-						log.Infof("Connected to %s", peer.ID)
-						if !*isLeaderFlag {
+						log.Infof("Connected to %s", p.ID)
+						if !*relayFlag {
 							connected = true
 							conChan <- true
 						}
 					}
-				} else if peer.ID != h.ID() {
-					log.Debug(peer)
-					h.Peerstore().RemovePeer(peer.ID)
-					dht.RoutingTable().RemovePeer(peer.ID)
+				} else if p.ID != h.ID() {
+					log.Debug(p)
+					h.Peerstore().RemovePeer(p.ID)
+					dht.RoutingTable().RemovePeer(p.ID)
 				}
 			}
 		}
@@ -302,9 +266,7 @@ func main() {
 	h, _ := startClient(ctx)
 	dht := initDHT(ctx, h)
 
-	if *relayFlag {
-		startRelay(h)
-	}
+	// fmt.Println(dht.RoutingTable().GetPeerInfos())
 
 	go discoverPeers(ctx, h, dht, conChan)
 
@@ -313,7 +275,9 @@ func main() {
 		panic(err)
 	}
 
-	if *isLeaderFlag {
+	if *relayFlag {
+		startRelay(h)
+
 		// initialize the chat rooms
 		// TODO: get a persisted list of rooms from somewhere
 		global, err := ps.Join("crcls-global")
@@ -326,13 +290,6 @@ func main() {
 		}
 
 		log.Debug("Connected to: ", ps.GetTopics())
-
-		json, err := json.Marshal(host.InfoFromHost(h))
-		if err != nil {
-			panic(fmt.Sprintf("Failed to marshal Leader AddrInfo: %v\n", err))
-		}
-
-		fmt.Printf("Leader: %s\n", string(json))
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -340,21 +297,19 @@ func main() {
 
 	select {
 	case <-conChan:
-		if !*isLeaderFlag && !*relayFlag {
-			log.Debug("Joining the chat room...")
-			// create a new PubSub service using the GossipSub router
-			errors := make(chan error, 1)
-			JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log, errors)
+		log.Debug("Joining the chat room...")
+		// create a new PubSub service using the GossipSub router
+		errors := make(chan error, 1)
+		JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log, errors)
 
-			select {
-			case err := <-errors:
-				fmt.Println(err)
-				cancel()
-				os.Exit(1)
-			case <-stop:
-				cancel()
-				os.Exit(0)
-			}
+		select {
+		case err := <-errors:
+			fmt.Println(err)
+			cancel()
+			os.Exit(1)
+		case <-stop:
+			cancel()
+			os.Exit(0)
 		}
 	case <-ctx.Done():
 		h.Peerstore().ClearAddrs(h.ID())

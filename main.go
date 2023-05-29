@@ -73,7 +73,7 @@ func startRelay(h host.Host) {
 		panic(fmt.Sprintf("Failed to marshal Relay AddrInfo: %v\n", err))
 	}
 
-	fmt.Println(string(json))
+	log.Infof("Relay: %s", string(json))
 }
 
 func startClient(ctx context.Context) (host.Host, error) {

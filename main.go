@@ -289,7 +289,7 @@ func main() {
 			panic(err)
 		}
 
-		log.Debug("Connected to: ", ps.GetTopics())
+		log.Info("Connected to: ", ps.GetTopics())
 	}
 
 	stop := make(chan os.Signal, 1)

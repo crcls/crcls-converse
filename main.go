@@ -24,7 +24,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	// pubsub "github.com/libp2p/go-libp2p-pubsub"
 
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
@@ -259,7 +259,7 @@ func main() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	room := fmt.Sprintf("crcls-%s", *roomFlag)
+	// room := fmt.Sprintf("crcls-%s", *roomFlag)
 
 	conChan := make(chan bool, 1)
 
@@ -270,50 +270,50 @@ func main() {
 
 	go discoverPeers(ctx, h, dht, conChan)
 
-	ps, err := pubsub.NewGossipSub(ctx, h)
-	if err != nil {
-		panic(err)
-	}
+	// ps, err := pubsub.NewGossipSub(ctx, h)
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	if *relayFlag {
-		startRelay(h)
+	// if *relayFlag {
+	// 	startRelay(h)
 
-		// initialize the chat rooms
-		// TODO: get a persisted list of rooms from somewhere
-		global, err := ps.Join("crcls-global")
-		if err != nil {
-			panic(err)
-		}
+	// 	// initialize the chat rooms
+	// 	// TODO: get a persisted list of rooms from somewhere
+	// 	global, err := ps.Join("crcls-global")
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
 
-		if _, err := global.Subscribe(); err != nil {
-			panic(err)
-		}
+	// 	if _, err := global.Subscribe(); err != nil {
+	// 		panic(err)
+	// 	}
 
-		log.Info("Connected to: ", ps.GetTopics())
-	}
+	// 	log.Info("Connected to: ", ps.GetTopics())
+	// }
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT)
 
 	select {
-	case <-conChan:
-		log.Debug("Joining the chat room...")
-		// create a new PubSub service using the GossipSub router
-		errors := make(chan error, 1)
-		JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log, errors)
+	// case <-conChan:
+	// 	log.Debug("Joining the chat room...")
+	// 	// create a new PubSub service using the GossipSub router
+	// 	errors := make(chan error, 1)
+	// 	JoinChatRoom(ctx, ps, h.ID(), *nameFlag, room, log, errors)
 
-		select {
-		case err := <-errors:
-			fmt.Println(err)
-			cancel()
-			os.Exit(1)
-		case <-stop:
-			cancel()
-			os.Exit(0)
-		}
+	// 	select {
+	// 	case err := <-errors:
+	// 		fmt.Println(err)
+	// 		cancel()
+	// 		os.Exit(1)
+	// 	case <-stop:
+	// 		cancel()
+	// 		os.Exit(0)
+	// 	}
 	case <-ctx.Done():
-		h.Peerstore().ClearAddrs(h.ID())
-		h.Peerstore().RemovePeer(h.ID())
+		// h.Peerstore().ClearAddrs(h.ID())
+		// h.Peerstore().RemovePeer(h.ID())
 		h.Close()
 	case <-stop:
 		cancel()

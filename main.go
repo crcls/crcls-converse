@@ -36,7 +36,8 @@ func main() {
 
 	a := account.New()
 
-	statusChan := network.Connect(ctx, *portFlag, a)
+	net := network.New(*portFlag)
+	statusChan := net.Connect(ctx, a)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT)

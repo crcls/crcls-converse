@@ -1,4 +1,4 @@
-package main
+package chatroom
 
 import (
 	"bufio"
@@ -8,7 +8,6 @@ import (
 	"os"
 
 	logging "github.com/ipfs/go-log/v2"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -17,9 +16,6 @@ import (
 // ChatRoomBufSize is the number of incoming messages to buffer for each topic.
 const ChatRoomBufSize = 128
 
-// ChatRoom represents a subscription to a single PubSub topic. Messages
-// can be published to the topic with ChatRoom.Publish, and received
-// messages are pushed to the Messages channel.
 type ChatRoom struct {
 	// Messages is a channel of messages received from other peers in the chat room
 	Messages chan *ChatMessage
@@ -36,16 +32,18 @@ type ChatRoom struct {
 	log      *logging.ZapEventLogger
 }
 
-// ChatMessage gets converted to/from JSON and sent in the body of pubsub messages.
 type ChatMessage struct {
 	Message    string
 	SenderID   string
 	SenderNick string
 }
 
-// JoinChatRoom tries to subscribe to the PubSub topic for the room name, returning
-// a ChatRoom on success.
-func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, name, roomName string, log *logging.ZapEventLogger, errChan chan error) {
+func Join(ctx context.Context, selfID peer.ID, name, roomName string, errChan chan error) {
+	ps, err := pubsub.NewGossipSub(ctx)
+	if err != nil {
+		panic(err)
+	}
+
 	// join the pubsub topic
 	topic, err := ps.Join(roomName)
 	if err != nil {
@@ -58,7 +56,7 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, name, 
 		errChan <- err
 	}
 
-	log.Infof("You have now joined the %s room.\n", roomName)
+	log.Infof("You have now joined the %s room.", roomName)
 
 	cr := &ChatRoom{
 		ctx:      ctx,
@@ -108,6 +106,7 @@ func (cr *ChatRoom) streamConsoleTo() {
 			cr.Errors <- err
 			return
 		}
+		// Publish to the network
 		if err := cr.Publish(s); err != nil {
 			cr.log.Error("### Publish error:", err)
 		}
@@ -135,61 +134,5 @@ func (cr *ChatRoom) printMessagesFrom() {
 
 		fmt.Printf("%s: %s\n", cm.SenderNick, cm.Message)
 		fmt.Printf("%s: ", cr.name)
-	}
-}
-
-func handleStream(stream network.Stream) {
-	fmt.Println("Got a new stream!")
-
-	// Create a buffer stream for non blocking read and write.
-	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-
-	go readData(rw)
-	go writeData(rw)
-
-	// 'stream' will stay open until you close it (or the other side closes it).
-}
-
-func readData(rw *bufio.ReadWriter) {
-	for {
-		str, err := rw.ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading from buffer")
-			panic(err)
-		}
-
-		if str == "" {
-			return
-		}
-		if str != "\n" {
-			// Green console colour: 	\x1b[32m
-			// Reset console colour: 	\x1b[0m
-			fmt.Printf("\x1b[32m%s\x1b[0m> ", str)
-		}
-
-	}
-}
-
-func writeData(rw *bufio.ReadWriter) {
-	stdReader := bufio.NewReader(os.Stdin)
-
-	for {
-		fmt.Print("> ")
-		sendData, err := stdReader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading from stdin")
-			panic(err)
-		}
-
-		_, err = rw.WriteString(fmt.Sprintf("%s\n", sendData))
-		if err != nil {
-			fmt.Println("Error writing to buffer")
-			panic(err)
-		}
-		err = rw.Flush()
-		if err != nil {
-			fmt.Println("Error flushing buffer")
-			panic(err)
-		}
 	}
 }

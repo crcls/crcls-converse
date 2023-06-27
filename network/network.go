@@ -11,6 +11,9 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	// "github.com/libp2p/go-libp2p/core/peer"
+	// "github.com/libp2p/go-libp2p/core/protocol"
+
 	// "github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
@@ -25,7 +28,7 @@ import (
 const DiscoveryServiceTag = "crcls-converse"
 
 const ProtocolName = "/crcls"
-const ProtocolVersion = ProtocolName + "/0.0.1"
+const ProtocolVersion = "0.0.1"
 
 var log = logger.GetLogger()
 
@@ -78,7 +81,7 @@ func initDHT(ctx context.Context, h host.Host) (*kaddht.IpfsDHT, error) {
 		return nil, err
 	}
 
-	dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeClient), kaddht.RoutingTableFilter(kaddht.PublicRoutingTableFilter), kaddht.ProtocolPrefix(ProtocolName))
+	dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeClient), kaddht.RoutingTableFilter(kaddht.PublicRoutingTableFilter))
 
 	if err != nil {
 		return dht, err
@@ -123,8 +126,9 @@ func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, status
 		}
 
 		for p := range peers {
-			// log.Debug("Discovering peers")
 			if p.ID != h.ID() {
+				pbytes, _ := p.MarshalJSON()
+				log.Debugf("Peer: %v", string(pbytes))
 				if err := h.Connect(ctx, p); err == nil {
 					log.Debugf("Connected to %s", p.ID)
 					peerCount := h.Peerstore().Peers().Len()

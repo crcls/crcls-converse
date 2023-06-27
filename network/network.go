@@ -24,7 +24,8 @@ import (
 // DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 const DiscoveryServiceTag = "crcls-converse"
 
-const ProtocolName = "/crcls/0.0.1"
+const ProtocolName = "/crcls"
+const ProtocolVersion = ProtocolName + "/0.0.1"
 
 var log = logger.GetLogger()
 
@@ -53,7 +54,7 @@ func startRelay(h host.Host) {
 
 func startClient(ctx context.Context, port int, identity crypto.PrivKey) (host.Host, error) {
 	opts := libp2p.ChainOptions(
-		libp2p.ProtocolVersion(ProtocolName),
+		libp2p.ProtocolVersion(ProtocolVersion),
 		libp2p.Identity(identity),
 		libp2p.Security(tls.ID, tls.New),
 		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port)),
@@ -77,7 +78,7 @@ func initDHT(ctx context.Context, h host.Host) (*kaddht.IpfsDHT, error) {
 		return nil, err
 	}
 
-	dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeClient), kaddht.RoutingTableFilter(kaddht.PublicRoutingTableFilter))
+	dht, err = kaddht.New(ctx, h, kaddht.Mode(kaddht.ModeClient), kaddht.RoutingTableFilter(kaddht.PublicRoutingTableFilter), kaddht.ProtocolPrefix(ProtocolName))
 
 	if err != nil {
 		return dht, err

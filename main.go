@@ -38,23 +38,6 @@ func main() {
 
 	statusChan := network.Connect(ctx, *portFlag, a)
 
-	// if *relayFlag {
-	// 	startRelay(h)
-
-	// 	// initialize the chat rooms
-	// 	// TODO: get a persisted list of rooms from somewhere
-	// 	global, err := ps.Join("crcls-global")
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-
-	// 	if _, err := global.Subscribe(); err != nil {
-	// 		panic(err)
-	// 	}
-
-	// 	log.Info("Connected to: ", ps.GetTopics())
-	// }
-
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT)
 
@@ -67,15 +50,14 @@ func main() {
 		// errors := make(chan error, 1)
 		// chatroom.Join(ctx, ps, h.ID(), *nameFlag, room, log, errors)
 
-		// select {
+		select {
 		// case err := <-errors:
 		// 	fmt.Println(err)
 		// 	cancel()
 		// 	os.Exit(1)
-		// case <-stop:
-		// 	cancel()
-		// 	os.Exit(0)
-		// }
+		case <-stop:
+			cancel()
+		}
 	case <-stop:
 		cancel()
 	case <-ctx.Done():

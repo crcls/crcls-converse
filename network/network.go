@@ -11,7 +11,7 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/discovery"
+	// "github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 
@@ -108,11 +108,11 @@ func initDHT(ctx context.Context, h host.Host) (*kaddht.IpfsDHT, error) {
 func discoverPeers(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, statusChan chan ConnectionStatus) {
 	routingDiscovery := drouting.NewRoutingDiscovery(dht)
 
-	// Let others know we are available to join for ten minutes.
-	dutil.Advertise(ctx, routingDiscovery, "crcls", discovery.TTL(time.Minute*10))
+	// Let others know we are available to join.
+	dutil.Advertise(ctx, routingDiscovery, ProtocolName)
 
 	for {
-		peers, err := routingDiscovery.FindPeers(ctx, "crcls")
+		peers, err := routingDiscovery.FindPeers(ctx, ProtocolName)
 		if err != nil {
 			statusChan <- ConnectionStatus{
 				Error:     err,

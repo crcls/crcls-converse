@@ -40,10 +40,16 @@ func (n *Notifee) Disconnected(net network.Network, con network.Conn) {
 	for i, peer := range n.net.Peers {
 		if peer.PeerID == peerRecord.ID {
 			log.Debugf("Peer %s has disconnected", peerRecord.ID)
-			if i < len(n.net.Peers)-1 {
-				copy(n.net.Peers[i:], n.net.Peers[i+1:])
+
+			if i == len(n.net.Peers)-1 {
+				n.net.Peers = n.net.Peers[:len(n.net.Peers)-2]
+			} else if i == 0 {
+				n.net.Peers = n.net.Peers[1:]
+			} else {
+				start := n.net.Peers[:i-1]
+				end := n.net.Peers[i:]
+				n.net.Peers = append(start, end...)
 			}
-			n.net.Peers = n.net.Peers[:len(n.net.Peers)-1]
 		}
 	}
 }

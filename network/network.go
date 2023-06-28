@@ -63,6 +63,7 @@ func (net *Network) startClient(ctx context.Context, identity crypto.PrivKey) er
 
 	log.Debugf("Host ID: %s", h.ID())
 
+	h.Network().Notify(&Notifee{net})
 	net.Host = h
 
 	return nil

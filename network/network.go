@@ -137,8 +137,6 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 
 		for p := range peers {
 			if net.isNewPeer(p) {
-				pbytes, _ := p.MarshalJSON()
-				log.Debugf("Peer: %v", string(pbytes))
 				if err := net.Host.Connect(ctx, p); err == nil {
 					log.Debugf("Connected to %s", p.ID)
 					net.Peers = append(net.Peers, *peer.PeerRecordFromAddrInfo(p))
@@ -165,7 +163,6 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 
 		select {
 		case <-time.After(discInterval):
-			log.Debug("tick")
 		case <-ctx.Done():
 			log.Debug("Discovery ended")
 			break

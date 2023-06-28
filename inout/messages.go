@@ -11,6 +11,6 @@ type StatusMessage struct {
 }
 
 type PeerMessage struct {
-	Connected bool
-	Id        peer.ID
+	Connected bool    `json:"connected"`
+	Id        peer.ID `json:"id"`
 }

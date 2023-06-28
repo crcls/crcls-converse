@@ -26,8 +26,13 @@ func Connect() {
 	go writeData(rw)
 }
 
+type PeerEvent struct {
+	Type    string      `json:"type"`
+	Message PeerMessage `json:"message"`
+}
+
 func Write(msg PeerMessage) {
-	data, err := json.Marshal(msg)
+	data, err := json.Marshal(PeerEvent{Type: "peer", Message: msg})
 
 	if err != nil {
 		log.Error(err)

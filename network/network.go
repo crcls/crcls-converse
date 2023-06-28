@@ -36,9 +36,9 @@ var log = logger.GetLogger()
 var discInterval = time.Second
 
 type ConnectionStatus struct {
-	Error     error
-	Connected bool
-	Peer      *peer.PeerRecord
+	Error     error            `json:"error"`
+	Connected bool             `json:"connected"`
+	Peer      *peer.PeerRecord `json:"peer"`
 }
 
 type Network struct {

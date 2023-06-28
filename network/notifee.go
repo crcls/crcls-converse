@@ -2,7 +2,7 @@ package network
 
 import (
 	"github.com/libp2p/go-libp2p/core/network"
-	// "github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -37,14 +37,16 @@ func (n *Notifee) Connected(net network.Network, con network.Conn) {
 func (n *Notifee) Disconnected(net network.Network, con network.Conn) {
 	peerRecord := net.Peerstore().PeerInfo(con.RemotePeer())
 
-	for i, peer := range n.net.Peers {
-		if peer.PeerID == peerRecord.ID {
+	for i, p := range n.net.Peers {
+		if p.PeerID == peerRecord.ID {
 			log.Debugf("Peer %s has disconnected", peerRecord.ID)
 
-			if i == len(n.net.Peers)-1 {
-				n.net.Peers = n.net.Peers[:len(n.net.Peers)-2]
+			if len(n.net.Peers) == 1 {
+				n.net.Peers = make([]*peer.PeerRecord, 0)
 			} else if i == 0 {
 				n.net.Peers = n.net.Peers[1:]
+			} else if i == len(n.net.Peers)-1 {
+				n.net.Peers = n.net.Peers[:len(n.net.Peers)-2]
 			} else {
 				start := n.net.Peers[:i-1]
 				end := n.net.Peers[i:]

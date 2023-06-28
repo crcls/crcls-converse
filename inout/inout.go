@@ -36,6 +36,9 @@ func Write(msg PeerMessage) {
 	}
 
 	internalIO.rw.Write(data)
+	if err := internalIO.rw.Flush(); err != nil {
+		log.Error(err)
+	}
 }
 
 func writeData(rw *bufio.ReadWriter) {

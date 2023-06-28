@@ -42,26 +42,29 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT)
 
-	select {
-	case status := <-statusChan:
-		log.Infof("Status Event %+v", status)
-		// room := fmt.Sprintf("crcls-%s", *roomFlag)
-		// log.Debugf("Joining the chat room: %s", room)
-		// // create a new PubSub service using the GossipSub router
-		// errors := make(chan error, 1)
-		// chatroom.Join(ctx, ps, h.ID(), *nameFlag, room, log, errors)
-
+	for {
 		select {
-		// case err := <-errors:
-		// 	fmt.Println(err)
-		// 	cancel()
-		// 	os.Exit(1)
+		case status := <-statusChan:
+			log.Infof("Status Event %v", status)
+			// room := fmt.Sprintf("crcls-%s", *roomFlag)
+			// log.Debugf("Joining the chat room: %s", room)
+			// // create a new PubSub service using the GossipSub router
+			// errors := make(chan error, 1)
+			// chatroom.Join(ctx, ps, h.ID(), *nameFlag, room, log, errors)
+
+			select {
+			// case err := <-errors:
+			// 	fmt.Println(err)
+			// 	cancel()
+			// 	os.Exit(1)
+			case <-stop:
+				cancel()
+			}
 		case <-stop:
 			cancel()
+			break
+		case <-ctx.Done():
+			os.Exit(0)
 		}
-	case <-stop:
-		cancel()
-	case <-ctx.Done():
-		os.Exit(0)
 	}
 }

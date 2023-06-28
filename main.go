@@ -5,7 +5,9 @@ import (
 	"crcls-converse/account"
 	"crcls-converse/logger"
 	"crcls-converse/network"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -45,12 +47,13 @@ func main() {
 	for {
 		select {
 		case status := <-statusChan:
-			log.Infof("Status Event %v", status)
-			// room := fmt.Sprintf("crcls-%s", *roomFlag)
-			// log.Debugf("Joining the chat room: %s", room)
-			// // create a new PubSub service using the GossipSub router
-			// errors := make(chan error, 1)
-			// chatroom.Join(ctx, ps, h.ID(), *nameFlag, room, log, errors)
+			b, err := json.Marshal(status)
+
+			if err != nil {
+				log.Debugf("Failed to marshal: %+v", status)
+			}
+
+			fmt.Printf("%v\n", string(b))
 		case <-stop:
 			cancel()
 			break

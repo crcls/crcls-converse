@@ -155,8 +155,6 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 					case 1000:
 						discInterval = time.Hour
 					}
-				} else {
-					log.Debugf("Failed to connect to %v", p.ID)
 				}
 			}
 		}

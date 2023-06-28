@@ -1,26 +1,43 @@
-package commands
+package inout
 
 import (
 	"bufio"
+	"crcls-converse/logger"
+	"encoding/json"
 	"fmt"
 	"os"
-
-	"github.com/libp2p/go-libp2p/core/network"
 )
 
-func handleStream(stream network.Stream) {
-	fmt.Println("Got a new stream!")
+type IO struct {
+	rw *bufio.ReadWriter
+}
 
-	// Create a buffer stream for non blocking read and write.
-	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+var internalIO IO
+var log = logger.GetLogger()
+
+func Connect() {
+	stdin := bufio.NewReader(os.Stdin)
+	stdout := bufio.NewWriter(os.Stdout)
+	rw := bufio.NewReadWriter(stdin, stdout)
+
+	internalIO = IO{rw}
 
 	go readData(rw)
 	go writeData(rw)
-
-	// 'stream' will stay open until you close it (or the other side closes it).
 }
 
-func readData(rw *bufio.ReadWriter) {
+func Write(msg PeerMessage) {
+	data, err := json.Marshal(msg)
+
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	internalIO.rw.Write(data)
+}
+
+func writeData(rw *bufio.ReadWriter) {
 	for {
 		str, err := rw.ReadString('\n')
 		if err != nil {
@@ -40,7 +57,7 @@ func readData(rw *bufio.ReadWriter) {
 	}
 }
 
-func writeData(rw *bufio.ReadWriter) {
+func readData(rw *bufio.ReadWriter) {
 	stdReader := bufio.NewReader(os.Stdin)
 
 	for {

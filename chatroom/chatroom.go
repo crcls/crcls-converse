@@ -3,6 +3,7 @@ package chatroom
 import (
 	"bufio"
 	"context"
+	"crcls-converse/logger"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,6 +16,8 @@ import (
 
 // ChatRoomBufSize is the number of incoming messages to buffer for each topic.
 const ChatRoomBufSize = 128
+
+var log = logger.GetLogger()
 
 type ChatRoom struct {
 	// Messages is a channel of messages received from other peers in the chat room
@@ -68,7 +71,6 @@ func Join(ctx context.Context, selfID peer.ID, name, roomName string, errChan ch
 		roomName: roomName,
 		Messages: make(chan *ChatMessage, ChatRoomBufSize),
 		Errors:   errChan,
-		log:      log,
 	}
 
 	// start reading messages from the subscription in a loop

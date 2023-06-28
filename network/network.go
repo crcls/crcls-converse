@@ -38,10 +38,11 @@ var discInterval = time.Second
 type ConnectionStatus struct {
 	Error     error
 	Connected bool
+	Peer      *peer.PeerRecord
 }
 
 type Network struct {
-	Peers     []peer.PeerRecord
+	Peers     []*peer.PeerRecord
 	Port      int
 	Connected bool
 	Host      host.Host
@@ -139,11 +140,13 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 			if net.isNewPeer(p) {
 				if err := net.Host.Connect(ctx, p); err == nil {
 					log.Debugf("Connected to %s", p.ID)
-					net.Peers = append(net.Peers, *peer.PeerRecordFromAddrInfo(p))
+					pr := peer.PeerRecordFromAddrInfo(p)
+					net.Peers = append(net.Peers, pr)
 
 					statusChan <- ConnectionStatus{
 						Error:     nil,
 						Connected: true,
+						Peer:      pr,
 					}
 
 					log.Debugf("Peer count %d", len(net.Peers))

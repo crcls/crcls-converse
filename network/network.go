@@ -134,6 +134,7 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 						Connected: true,
 					}
 
+					log.Debugf("Peer count %d", len(net.Peers))
 					switch len(net.Peers) {
 					case 10:
 						discInterval = time.Minute
@@ -151,6 +152,7 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 		select {
 		case <-time.After(discInterval):
 		case <-ctx.Done():
+			log.Debug("Discovery ended")
 			break
 
 		}

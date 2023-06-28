@@ -52,6 +52,11 @@ func (n *Notifee) Disconnected(net network.Network, con network.Conn) {
 				end := n.net.Peers[i:]
 				n.net.Peers = append(start, end...)
 			}
+
+			n.net.StatusChan <- ConnectionStatus{
+				Connected: false,
+				Peer:      peer.PeerRecordFromAddrInfo(peerRecord),
+			}
 		}
 	}
 }

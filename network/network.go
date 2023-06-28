@@ -42,11 +42,12 @@ type ConnectionStatus struct {
 }
 
 type Network struct {
-	Peers     []*peer.PeerRecord
-	Port      int
-	Connected bool
-	Host      host.Host
-	DHT       *kaddht.IpfsDHT
+	Peers      []*peer.PeerRecord
+	Port       int
+	Connected  bool
+	Host       host.Host
+	DHT        *kaddht.IpfsDHT
+	StatusChan chan ConnectionStatus
 }
 
 func (net *Network) startClient(ctx context.Context, identity crypto.PrivKey) error {
@@ -121,7 +122,7 @@ func (net *Network) isNewPeer(peer peer.AddrInfo) bool {
 	return true
 }
 
-func (net *Network) discoverPeers(ctx context.Context, statusChan chan ConnectionStatus) {
+func (net *Network) discoverPeers(ctx context.Context) {
 	routingDiscovery := drouting.NewRoutingDiscovery(net.DHT)
 
 	// Let others know we are available to join.
@@ -130,7 +131,7 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 	for {
 		peers, err := routingDiscovery.FindPeers(ctx, ProtocolName)
 		if err != nil {
-			statusChan <- ConnectionStatus{
+			net.StatusChan <- ConnectionStatus{
 				Error:     err,
 				Connected: false,
 			}
@@ -143,7 +144,7 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 					pr := peer.PeerRecordFromAddrInfo(p)
 					net.Peers = append(net.Peers, pr)
 
-					statusChan <- ConnectionStatus{
+					net.StatusChan <- ConnectionStatus{
 						Error:     nil,
 						Connected: true,
 						Peer:      pr,
@@ -172,35 +173,28 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 	}
 }
 
-func (net *Network) Connect(ctx context.Context, acc *account.Account) chan ConnectionStatus {
-	statusChan := make(chan ConnectionStatus)
-
+func (net *Network) Connect(ctx context.Context, acc *account.Account) {
 	if err := net.startClient(ctx, acc.PK); err != nil {
-		statusChan <- ConnectionStatus{
+		net.StatusChan <- ConnectionStatus{
 			Error:     err,
 			Connected: false,
 		}
-
-		return statusChan
 	}
 
 	if err := net.initDHT(ctx); err != nil {
-		statusChan <- ConnectionStatus{
+		net.StatusChan <- ConnectionStatus{
 			Error:     err,
 			Connected: false,
 		}
-
-		return statusChan
 	}
 
-	go net.discoverPeers(ctx, statusChan)
-
-	return statusChan
+	go net.discoverPeers(ctx)
 }
 
 func New(port int) *Network {
 	return &Network{
-		Connected: false,
-		Port:      port,
+		Connected:  false,
+		Port:       port,
+		StatusChan: make(chan ConnectionStatus),
 	}
 }

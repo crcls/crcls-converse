@@ -33,7 +33,7 @@ func main() {
 	a := account.New()
 
 	net := network.New(*portFlag)
-	statusChan := net.Connect(ctx, a)
+	net.Connect(ctx, a)
 	inout.Connect()
 
 	stop := make(chan os.Signal, 1)
@@ -41,7 +41,7 @@ func main() {
 
 	for {
 		select {
-		case status := <-statusChan:
+		case status := <-net.StatusChan:
 			if status.Error != nil {
 				log.Fatal(status.Error)
 			}

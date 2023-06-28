@@ -28,7 +28,6 @@ func Connect() {
 
 func Write(msg PeerMessage) {
 	data, err := json.Marshal(msg)
-	log.Debug("Writing: %s", string(data))
 
 	if err != nil {
 		log.Error(err)
@@ -36,6 +35,7 @@ func Write(msg PeerMessage) {
 	}
 
 	internalIO.rw.Write(data)
+	internalIO.rw.Write([]byte("\n"))
 	if err := internalIO.rw.Flush(); err != nil {
 		log.Error(err)
 	}

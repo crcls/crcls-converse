@@ -106,6 +106,20 @@ func (net *Network) initDHT(ctx context.Context) error {
 	return nil
 }
 
+func (net *Network) isNewPeer(peer peer.AddrInfo) bool {
+	if net.Host.ID() == peer.ID {
+		return false
+	}
+
+	for _, p := range net.Peers {
+		if p.PeerID == peer.ID {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (net *Network) discoverPeers(ctx context.Context, statusChan chan ConnectionStatus) {
 	routingDiscovery := drouting.NewRoutingDiscovery(net.DHT)
 
@@ -122,7 +136,7 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 		}
 
 		for p := range peers {
-			if p.ID != net.Host.ID() {
+			if net.isNewPeer(p) {
 				pbytes, _ := p.MarshalJSON()
 				log.Debugf("Peer: %v", string(pbytes))
 				if err := net.Host.Connect(ctx, p); err == nil {

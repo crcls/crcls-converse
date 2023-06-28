@@ -129,7 +129,6 @@ func (net *Network) discoverPeers(ctx context.Context, statusChan chan Connectio
 					log.Debugf("Connected to %s", p.ID)
 					net.Peers = append(net.Peers, *peer.PeerRecordFromAddrInfo(p))
 
-					log.Debug("Peers: %+v", net.Peers)
 					statusChan <- ConnectionStatus{
 						Error:     nil,
 						Connected: true,

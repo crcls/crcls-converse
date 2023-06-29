@@ -12,10 +12,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	// "github.com/libp2p/go-libp2p/core/peer"
-	// "github.com/libp2p/go-libp2p/core/protocol"
-
-	// "github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
 
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
@@ -62,8 +58,6 @@ func (net *Network) startClient(ctx context.Context, identity crypto.PrivKey) er
 	if err != nil {
 		return err
 	}
-
-	log.Debugf("Host ID: %s", h.ID())
 
 	h.Network().Notify(&Notifee{net})
 	net.Host = h

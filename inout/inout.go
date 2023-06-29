@@ -4,88 +4,69 @@ import (
 	"bufio"
 	"crcls-converse/logger"
 	"encoding/json"
-	"fmt"
 	"os"
 )
 
-type IO struct {
-	rw *bufio.ReadWriter
-}
-
-var internalIO IO
 var log = logger.GetLogger()
 
-func Connect() {
-	stdin := bufio.NewReader(os.Stdin)
-	stdout := bufio.NewWriter(os.Stdout)
-	rw := bufio.NewReadWriter(stdin, stdout)
-
-	internalIO = IO{rw}
-
-	go readData(rw)
-	go writeData(rw)
+type Event struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
 }
 
-type PeerEvent struct {
-	Type    string      `json:"type"`
-	Message PeerMessage `json:"message"`
+type IO struct {
+	stdout    *bufio.Writer
+	stdin     *bufio.Reader
+	InputChan chan *InputCommand
 }
 
-func Write(msg PeerMessage) {
-	data, err := json.Marshal(PeerEvent{Type: "peer", Message: msg})
+func (io *IO) Write(eventType string, msg []byte) {
+	data, err := json.Marshal(Event{Type: eventType, Message: string(msg)})
 
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	internalIO.rw.Write(data)
-	internalIO.rw.Write([]byte("\n"))
-	if err := internalIO.rw.Flush(); err != nil {
+	io.stdout.Write(data)
+	io.stdout.Write([]byte("\n"))
+	if err := io.stdout.Flush(); err != nil {
 		log.Error(err)
 	}
 }
 
-func writeData(rw *bufio.ReadWriter) {
+func (io *IO) Read() {
 	for {
-		str, err := rw.ReadString('\n')
+		data, err := io.stdin.ReadBytes('\n')
 		if err != nil {
-			fmt.Println("Error reading from buffer")
-			panic(err)
+			log.Error(err)
 		}
 
-		if str == "" {
-			return
-		}
-		if str != "\n" {
-			// Green console colour: 	\x1b[32m
-			// Reset console colour: 	\x1b[0m
-			fmt.Printf("\x1b[32m%s\x1b[0m> ", str)
+		// Truncate the trailing return char
+		data = data[:len(data)-1]
+
+		if len(data) == 0 {
+			log.Error("Empty command")
+			continue
 		}
 
+		if ic, err := parseCommand(data); err == nil {
+			log.Debug(ic)
+			io.InputChan <- ic
+		} else {
+			log.Error(err)
+		}
 	}
 }
 
-func readData(rw *bufio.ReadWriter) {
-	stdReader := bufio.NewReader(os.Stdin)
+func Connect() *IO {
+	stdin := bufio.NewReader(os.Stdin)
+	stdout := bufio.NewWriter(os.Stdout)
+	ic := make(chan *InputCommand)
 
-	for {
-		fmt.Print("> ")
-		sendData, err := stdReader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading from stdin")
-			panic(err)
-		}
+	io := &IO{stdin: stdin, stdout: stdout, InputChan: ic}
 
-		_, err = rw.WriteString(fmt.Sprintf("%s\n", sendData))
-		if err != nil {
-			fmt.Println("Error writing to buffer")
-			panic(err)
-		}
-		err = rw.Flush()
-		if err != nil {
-			fmt.Println("Error flushing buffer")
-			panic(err)
-		}
-	}
+	go io.Read()
+
+	return io
 }

@@ -12,8 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 var (
@@ -22,12 +20,6 @@ var (
 )
 
 var log = logger.GetLogger()
-
-type ReadyEvent struct {
-	Status    string  `json:"status"`
-	Host      peer.ID `json:"host"`
-	PeerCount int64   `json:"peerCount"`
-}
 
 func main() {
 	flag.Parse()
@@ -47,12 +39,11 @@ func main() {
 
 	io := inout.Connect()
 
-	readyEvent, err := json.Marshal(&ReadyEvent{Status: "connected", Host: net.Host.ID(), PeerCount: int64(len(net.Peers))})
+	readyEvent, err := json.Marshal(&inout.ReadyMessage{Type: "ready", Status: "connected", Host: net.Host.ID(), PeerCount: int64(len(net.Peers))})
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	io.Write("ready", readyEvent)
+	io.Write(readyEvent)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT)
@@ -74,19 +65,27 @@ func main() {
 
 				switch subcmd {
 				case inout.CHANNELS:
-					channels, err := json.Marshal(channel.List())
+					data, err := json.Marshal(&inout.ListChannelsMessage{
+						Type:     "List",
+						Subject:  subcmd,
+						Channels: channel.List(),
+					})
 					if err != nil {
 						log.Fatal(err)
 					}
 
-					io.Write("list", channels)
+					io.Write(data)
 				case inout.PEERS:
-					peers, err := json.Marshal(net.Peers)
+					peers, err := json.Marshal(&inout.ListPeersMessage{
+						Type:    "list",
+						Subject: subcmd,
+						Peers:   net.Peers,
+					})
 					if err != nil {
 						log.Fatal(err)
 					}
 
-					io.Write("list", peers)
+					io.Write(peers)
 				}
 			}
 		case status := <-net.StatusChan:
@@ -94,12 +93,12 @@ func main() {
 				log.Fatal(status.Error)
 			}
 
-			data, err := json.Marshal(inout.PeerMessage{Connected: status.Connected, Id: status.Peer.PeerID})
+			data, err := json.Marshal(inout.PeerMessage{Type: "peer", Connected: status.Connected, Id: status.Peer.PeerID})
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			io.Write("network", data)
+			io.Write(data)
 		case <-stop:
 			cancel()
 			break

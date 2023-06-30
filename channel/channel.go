@@ -30,18 +30,17 @@ type Message struct {
 	Channel  string `json:"channel"`
 }
 
-type ChannelError struct {
-	Channel string `json:"channel"`
-	Error   error  `json:"error"`
-}
-
 func handleError(err error, channel string, io *inout.IO) {
-	data, merr := json.Marshal(&ChannelError{channel, err})
+	data, merr := json.Marshal(&inout.ChannelError{
+		Type:    "error",
+		Channel: channel,
+		Error:   err,
+	})
 	if merr != nil {
 		log.Fatal(merr)
 	}
 
-	io.Write("error", data)
+	io.Write(data)
 }
 
 func Join(ctx context.Context, h host.Host, channel string, io *inout.IO) *Channel {
@@ -113,7 +112,18 @@ func (ch *Channel) Listen() {
 			continue
 		}
 
-		ch.io.Write("message", msg.Data)
+		data, err := json.Marshal(&inout.ReplyMessage{
+			Type:    "reply",
+			Channel: ch.name,
+			Peer:    string(msg.ReceivedFrom),
+			Message: string(msg.Data),
+		})
+
+		if err != nil {
+			handleError(err, ch.name, ch.io)
+		}
+
+		ch.io.Write(data)
 	}
 }
 

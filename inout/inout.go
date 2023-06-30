@@ -3,7 +3,6 @@ package inout
 import (
 	"bufio"
 	"crcls-converse/logger"
-	"encoding/json"
 	"os"
 )
 
@@ -20,16 +19,10 @@ type IO struct {
 	InputChan chan *InputCommand
 }
 
-func (io *IO) Write(eventType string, msg []byte) {
-	data, err := json.Marshal(Event{Type: eventType, Message: string(msg)})
+var internalIO *IO
 
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	io.stdout.Write(data)
-	io.stdout.Write([]byte("\n"))
+func (io *IO) Write(msg []byte) {
+	io.stdout.Write(append(msg, []byte("\n")...))
 	if err := io.stdout.Flush(); err != nil {
 		log.Error(err)
 	}
@@ -64,9 +57,9 @@ func Connect() *IO {
 	stdout := bufio.NewWriter(os.Stdout)
 	ic := make(chan *InputCommand)
 
-	io := &IO{stdin: stdin, stdout: stdout, InputChan: ic}
+	internalIO = &IO{stdin: stdin, stdout: stdout, InputChan: ic}
 
-	go io.Read()
+	go internalIO.Read()
 
-	return io
+	return internalIO
 }

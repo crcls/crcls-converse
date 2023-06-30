@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crcls-converse/account"
+	"crcls-converse/channel"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"crcls-converse/network"
@@ -61,6 +62,25 @@ func main() {
 		case cmd := <-io.InputChan:
 			log.Debugf("Received command: %s with data: %s", cmd.Type, string(cmd.Data))
 			// TODO: delegate the command
+
+			switch cmd.Type {
+			case inout.LIST:
+				subcmd, err := cmd.NextSubcomand()
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				log.Debug(subcmd)
+
+				if subcmd == inout.CHANNELS {
+					channels, err := json.Marshal(channel.List())
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					io.Write("list", channels)
+				}
+			}
 		case status := <-net.StatusChan:
 			if status.Error != nil {
 				log.Fatal(status.Error)

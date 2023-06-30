@@ -39,6 +39,8 @@ func main() {
 
 	io := inout.Connect()
 
+	chMgr := channel.NewManager(ctx, net.Host, io)
+
 	readyEvent, err := json.Marshal(&inout.ReadyMessage{Type: "ready", Status: "connected", Host: net.Host.ID(), PeerCount: int64(len(net.Peers))})
 	if err != nil {
 		log.Fatal(err)
@@ -68,7 +70,7 @@ func main() {
 					data, err := json.Marshal(&inout.ListChannelsMessage{
 						Type:     "List",
 						Subject:  subcmd,
-						Channels: channel.List(),
+						Channels: chMgr.ListChannels(),
 					})
 					if err != nil {
 						log.Fatal(err)
@@ -87,6 +89,13 @@ func main() {
 
 					io.Write(peers)
 				}
+			case inout.JOIN:
+				chid, err := cmd.NextSubcomand()
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				chMgr.Join(string(chid))
 			}
 		case status := <-net.StatusChan:
 			if status.Error != nil {

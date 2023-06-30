@@ -4,17 +4,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-type ErrorMessage struct {
-	Type    string `json:"type"`
-	message string
-}
-
-type ChannelError struct {
-	Type    string `json:"type"`
-	Channel string `json:"channel"`
-	Error   error  `json:"error"`
-}
-
 type ReplyMessage struct {
 	Type    string `json:"type"`
 	Peer    string `json:"peer"`

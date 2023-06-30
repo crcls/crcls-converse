@@ -72,13 +72,21 @@ func main() {
 
 				log.Debug(subcmd)
 
-				if subcmd == inout.CHANNELS {
+				switch subcmd {
+				case inout.CHANNELS:
 					channels, err := json.Marshal(channel.List())
 					if err != nil {
 						log.Fatal(err)
 					}
 
 					io.Write("list", channels)
+				case inout.PEERS:
+					peers, err := json.Marshal(net.Peers)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					io.Write("list", peers)
 				}
 			}
 		case status := <-net.StatusChan:

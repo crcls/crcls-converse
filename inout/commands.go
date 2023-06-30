@@ -16,7 +16,7 @@ const (
 	REPLY = "reply"
 )
 
-// LIST subcommands
+// LIST sub-commands
 const (
 	PEERS    = "peers"
 	CHANNELS = "channels"

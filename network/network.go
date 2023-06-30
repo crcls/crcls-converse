@@ -190,5 +190,6 @@ func New(port int) *Network {
 		Connected:  false,
 		Port:       port,
 		StatusChan: make(chan ConnectionStatus),
+		Peers:      make([]*peer.PeerRecord, 0),
 	}
 }

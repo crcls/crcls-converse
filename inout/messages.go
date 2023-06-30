@@ -6,7 +6,7 @@ import (
 
 type ReplyMessage struct {
 	Type    string `json:"type"`
-	Peer    string `json:"peer"`
+	Sender  string `json:"sender"`
 	Channel string `json:"channel"`
 	Message string `json:"message"`
 }

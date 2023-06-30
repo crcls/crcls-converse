@@ -58,7 +58,7 @@ func main() {
 
 			switch cmd.Type {
 			case inout.LIST:
-				subcmd, err := cmd.NextSubcomand()
+				subcmd, err := cmd.NextSubcommand()
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -90,12 +90,14 @@ func main() {
 					io.Write(peers)
 				}
 			case inout.JOIN:
-				chid, err := cmd.NextSubcomand()
+				chid, err := cmd.NextSubcommand()
 				if err != nil {
 					log.Fatal(err)
 				}
 
 				chMgr.Join(string(chid))
+			case inout.REPLY:
+				chMgr.Active.Publish(string(cmd.Data))
 			}
 		case status := <-net.StatusChan:
 			if status.Error != nil {

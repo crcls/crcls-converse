@@ -27,7 +27,6 @@ type Message struct {
 	SenderID string `json:"sender"`
 }
 
-// Publish sends a message to the pubsub topic.
 func (ch *Channel) Publish(message string) error {
 	// TODO: encrypt the message using LitProtocol
 
@@ -35,7 +34,6 @@ func (ch *Channel) Publish(message string) error {
 		Message:  message,
 		SenderID: ch.Host.ID().Pretty(),
 	}
-	log.Debug("%+v\n", m)
 
 	msgBytes, err := json.Marshal(m)
 	if err != nil {
@@ -47,21 +45,26 @@ func (ch *Channel) Publish(message string) error {
 
 func (ch *Channel) Listen() {
 	for {
-		msg, err := ch.Sub.Next(ch.ctx)
+		response, err := ch.Sub.Next(ch.ctx)
 		if err != nil {
 			inout.EmitChannelError(err)
 			return
 		}
 		// only forward messages delivered by others
-		if msg.ReceivedFrom == ch.Host.ID() {
+		if response.ReceivedFrom == ch.Host.ID() {
 			continue
+		}
+
+		message := Message{}
+		if err := json.Unmarshal(response.Data, &message); err != nil {
+			inout.EmitChannelError(err)
 		}
 
 		data, err := json.Marshal(&inout.ReplyMessage{
 			Type:    "reply",
 			Channel: ch.ID,
-			Peer:    string(msg.ReceivedFrom),
-			Message: string(msg.Data),
+			Sender:  message.SenderID,
+			Message: message.Message,
 		})
 
 		if err != nil {

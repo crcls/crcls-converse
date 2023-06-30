@@ -34,7 +34,7 @@ type InputCommand struct {
 	Current CMD
 }
 
-func (ic *InputCommand) NextSubcomand() (CMD, error) {
+func (ic *InputCommand) NextSubcommand() (CMD, error) {
 	next, rest, err := parseNext(ic.Data)
 	if err != nil {
 		return "", err

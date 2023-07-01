@@ -4,6 +4,7 @@ import (
 	"context"
 	"crcls-converse/account"
 	"crcls-converse/channel"
+	"crcls-converse/datastore"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"crcls-converse/network"
@@ -33,11 +34,13 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	a := account.New()
+	io := inout.Connect()
 
 	net := network.New(*portFlag)
 	net.Connect(ctx, a)
 
-	io := inout.Connect()
+	ds := datastore.NewDatastore(ctx, net)
+	log.Debugf("%+v", ds.Stats())
 
 	chMgr := channel.NewManager(ctx, net.Host, io)
 

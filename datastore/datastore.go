@@ -5,7 +5,7 @@ import (
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"crcls-converse/network"
-	"time"
+	// "time"
 
 	ipfslite "github.com/hsanjuan/ipfs-lite"
 	ipfsDs "github.com/ipfs/go-datastore"
@@ -33,7 +33,7 @@ func NewDatastore(ctx context.Context, net *network.Network) *Datastore {
 	// 	GcDiscardRatio: 0,
 	// 	GcInterval:     0,
 	// }
-	d, err := badger.NewDatastore(STORE_DIR, nil)
+	d, err := badger.NewDatastore(STORE_DIR, &badger.DefaultOptions)
 	if err != nil {
 		inout.EmitChannelError(err)
 		return nil
@@ -57,17 +57,19 @@ func NewDatastore(ctx context.Context, net *network.Network) *Datastore {
 		return nil
 	}
 
-	copts := crdt.Options{
-		Logger:              log,
-		RebroadcastInterval: time.Second * 10,
-		NumWorkers:          4,
-		DAGSyncerTimeout:    time.Second * 10,
-		MaxBatchDeltaSize:   100 * 1024,
-		RepairInterval:      time.Second * 30,
-		MultiHeadProcessing: true,
-	}
+	// copts := crdt.Options{
+	// 	Logger:              log,
+	// 	RebroadcastInterval: time.Second * 10,
+	// 	NumWorkers:          4,
+	// 	DAGSyncerTimeout:    time.Second * 10,
+	// 	MaxBatchDeltaSize:   100 * 1024,
+	// 	RepairInterval:      time.Second * 30,
+	// 	MultiHeadProcessing: true,
+	// }
+	copts := crdt.DefaultOptions()
+	copts.Logger = log
 
-	c, err := crdt.New(d, ipfsDs.NewKey(CRCLS_NS), dag, bcast, &copts)
+	c, err := crdt.New(d, ipfsDs.NewKey(CRCLS_NS), dag, bcast, copts)
 	if err != nil {
 		log.Fatal(err)
 	}

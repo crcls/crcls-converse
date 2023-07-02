@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -58,17 +59,12 @@ func main() {
 	for {
 		select {
 		case cmd := <-io.InputChan:
-			log.Debugf("Received command: %s with data: %s", cmd.Type, string(cmd.Data))
-			// TODO: delegate the command
-
 			switch cmd.Type {
 			case inout.LIST:
 				subcmd, err := cmd.NextSubcommand()
 				if err != nil {
 					log.Fatal(err)
 				}
-
-				log.Debug(subcmd)
 
 				switch subcmd {
 				case inout.CHANNELS:
@@ -97,7 +93,16 @@ func main() {
 					if chMgr.Active == nil {
 						inout.EmitChannelError(fmt.Errorf("No active channel."))
 					} else {
-						chMgr.Active.GetRecentMessages(time.Hour * 24)
+						sscmd, err := cmd.NextSubcommand()
+						if err != nil {
+							log.Fatal(err)
+						}
+						days, err := strconv.ParseInt(string(sscmd), 10, 64)
+						if err != nil {
+							log.Fatal(err)
+						}
+						dur := time.Hour * time.Duration(24*days)
+						chMgr.Active.GetRecentMessages(dur)
 					}
 				}
 			case inout.JOIN:

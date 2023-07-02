@@ -55,6 +55,7 @@ func (ch *Channel) Publish(message string) error {
 	// Append the timestamp
 	key := ch.key.Instance(strconv.FormatInt(ts, 10))
 
+	// Save the message to the datastore
 	if err := ch.ds.Put(ch.ctx, key, msgBytes); err != nil {
 		inout.EmitChannelError(err)
 	}
@@ -68,13 +69,13 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]Message, error) 
 
 	q := query.Query{
 		Prefix:   prefix.String(),
-		Orders:   []query.Order{query.OrderByKey{}}, // Optional: Order the results by key
-		KeysOnly: false,                             // Optional: Set to true if you only need the keys
+		Orders:   []query.Order{query.OrderByKeyDescending{}},
+		KeysOnly: false,
 	}
 
 	results, err := ch.ds.Query(ch.ctx, q)
 	if err != nil {
-		// Handle error
+		log.Debug(err)
 	}
 	defer results.Close()
 
@@ -84,13 +85,12 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]Message, error) 
 		key := res.Entry.Key
 		keyParts := strings.Split(key, ":")
 		timestampStr := keyParts[len(keyParts)-1]
-		timestampMicro, err := strconv.ParseInt(timestampStr, 10, 64)
 
+		timestampMicro, err := strconv.ParseInt(timestampStr, 10, 64)
 		if err != nil {
-			// Handle error
+			log.Debug(err)
 			continue
 		}
-
 		timestamp := time.Unix(0, timestampMicro*int64(time.Microsecond))
 
 		if timestamp.After(startTime) {

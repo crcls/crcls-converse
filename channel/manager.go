@@ -2,24 +2,28 @@ package channel
 
 import (
 	"context"
+	"crcls-converse/datastore"
 	"crcls-converse/inout"
 	"fmt"
 
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	ipfsDs "github.com/ipfs/go-datastore"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
 type ChannelManager struct {
 	ctx      context.Context
 	channels map[string]Channel
 	io       *inout.IO
+	ds       *datastore.Datastore
 	host     host.Host
 	ps       *pubsub.PubSub
-	Active   Channel
+	Active   *Channel
 }
 
-func NewManager(ctx context.Context, h host.Host, io *inout.IO) *ChannelManager {
+func NewManager(ctx context.Context, h host.Host, io *inout.IO, ds *datastore.Datastore) *ChannelManager {
 	ps, err := pubsub.NewGossipSub(ctx, h)
 	if err != nil {
 		inout.EmitChannelError(err)
@@ -31,6 +35,7 @@ func NewManager(ctx context.Context, h host.Host, io *inout.IO) *ChannelManager 
 		ps:   ps,
 		host: h,
 		io:   io,
+		ds:   ds,
 	}
 
 	return ch
@@ -73,6 +78,8 @@ func (chm *ChannelManager) Join(id string) {
 		ch = Channel{
 			ctx:   chm.ctx,
 			io:    chm.io,
+			ds:    chm.ds,
+			key:   ipfsDs.KeyWithNamespaces([]string{"crcls", id, chm.host.ID().Pretty()}),
 			ID:    id,
 			Topic: topic,
 			Host:  chm.host,
@@ -82,7 +89,7 @@ func (chm *ChannelManager) Join(id string) {
 		go ch.Listen()
 	}
 
-	chm.Active = ch
+	chm.Active = &ch
 }
 
 func (chm *ChannelManager) ListPeers(id string) []peer.ID {

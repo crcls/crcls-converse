@@ -10,6 +10,7 @@ import (
 	"crcls-converse/network"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,7 +18,7 @@ import (
 
 var (
 	portFlag    = flag.Int("p", 0, "PORT to connect on. 3123-3130")
-	verboseFlag = flag.Bool("v", false, "Verbose output")
+	verboseFlag = flag.Bool("verbose", false, "Verbose output")
 )
 
 var log = logger.GetLogger()
@@ -42,7 +43,7 @@ func main() {
 	ds := datastore.NewDatastore(ctx, net)
 	log.Debugf("%+v", ds.Stats())
 
-	chMgr := channel.NewManager(ctx, net.Host, io)
+	chMgr := channel.NewManager(ctx, net.Host, io, ds)
 
 	readyEvent, err := json.Marshal(&inout.ReadyMessage{Type: "ready", Status: "connected", Host: net.Host.ID(), PeerCount: int64(len(net.Peers))})
 	if err != nil {
@@ -100,7 +101,11 @@ func main() {
 
 				chMgr.Join(string(chid))
 			case inout.REPLY:
-				chMgr.Active.Publish(string(cmd.Data))
+				if chMgr.Active == nil {
+					inout.EmitChannelError(fmt.Errorf("No active channel."))
+				} else {
+					chMgr.Active.Publish(string(cmd.Data))
+				}
 			}
 		case status := <-net.StatusChan:
 			if status.Error != nil {

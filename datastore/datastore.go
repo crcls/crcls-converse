@@ -8,8 +8,9 @@ import (
 	"time"
 
 	ipfslite "github.com/hsanjuan/ipfs-lite"
-	"github.com/ipfs/go-datastore"
-	badger "github.com/ipfs/go-ds-badger"
+	ipfsDs "github.com/ipfs/go-datastore"
+	// "github.com/ipfs/go-datastore/query"
+	badger "github.com/ipfs/go-ds-badger3"
 	crdt "github.com/ipfs/go-ds-crdt"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
@@ -64,7 +65,7 @@ func NewDatastore(ctx context.Context, net *network.Network) *Datastore {
 		MultiHeadProcessing: true,
 	}
 
-	c, err := crdt.New(d, datastore.NewKey(CRCLS_NS), dag, bcast, &copts)
+	c, err := crdt.New(d, ipfsDs.NewKey(CRCLS_NS), dag, bcast, &copts)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -75,16 +76,16 @@ func NewDatastore(ctx context.Context, net *network.Network) *Datastore {
 	}
 }
 
-func (ds *Datastore) Put(ctx context.Context, key string, value []byte) error {
-	return ds.crdt.Put(ctx, datastore.NewKey(key), value)
+func (ds *Datastore) Put(ctx context.Context, key ipfsDs.Key, value []byte) error {
+	return ds.crdt.Put(ctx, key, value)
 }
 
-func (ds *Datastore) Get(ctx context.Context, key string) ([]byte, error) {
-	return ds.crdt.Get(ctx, datastore.NewKey(key))
+func (ds *Datastore) Get(ctx context.Context, key ipfsDs.Key) ([]byte, error) {
+	return ds.crdt.Get(ctx, key)
 }
 
-func (ds *Datastore) Delete(ctx context.Context, key string) error {
-	return ds.crdt.Delete(ctx, datastore.NewKey(key))
+func (ds *Datastore) Delete(ctx context.Context, key ipfsDs.Key) error {
+	return ds.crdt.Delete(ctx, key)
 }
 
 func (ds *Datastore) Close() error {

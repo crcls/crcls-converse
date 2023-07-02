@@ -2,37 +2,46 @@ package channel
 
 import (
 	"context"
+	"crcls-converse/datastore"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"encoding/json"
+	"strconv"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 
+	ipfsDs "github.com/ipfs/go-datastore"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
 var log = logger.GetLogger()
 
+type Message struct {
+	Message   string `json:"message"`
+	SenderID  string `json:"sender"`
+	Timestamp int64  `json:"timestamp"`
+}
+
 type Channel struct {
 	ctx   context.Context
 	io    *inout.IO
+	ds    *datastore.Datastore
+	key   ipfsDs.Key
 	ID    string
 	Sub   *pubsub.Subscription
 	Topic *pubsub.Topic
 	Host  host.Host
 }
 
-type Message struct {
-	Message  string `json:"message"`
-	SenderID string `json:"sender"`
-}
-
 func (ch *Channel) Publish(message string) error {
 	// TODO: encrypt the message using LitProtocol
 
+	ts := time.Now().UnixMicro()
 	m := Message{
-		Message:  message,
-		SenderID: ch.Host.ID().Pretty(),
+		Message:   message,
+		SenderID:  ch.Host.ID().Pretty(),
+		Timestamp: ts,
 	}
 
 	msgBytes, err := json.Marshal(m)
@@ -40,8 +49,18 @@ func (ch *Channel) Publish(message string) error {
 		return err
 	}
 
+	// Append the timestamp
+	key := ch.key.Instance(strconv.FormatInt(ts, 10))
+
+	if err := ch.ds.Put(ch.ctx, key, msgBytes); err != nil {
+		inout.EmitChannelError(err)
+	}
+
 	return ch.Topic.Publish(ch.ctx, msgBytes)
 }
+
+// func (ch *Channel) GetRecentMessages(to time.Duration) ([]Message, error) {
+// }
 
 func (ch *Channel) Listen() {
 	for {

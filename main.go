@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 var (
@@ -92,6 +93,12 @@ func main() {
 					}
 
 					io.Write(peers)
+				case inout.MESSAGES:
+					if chMgr.Active == nil {
+						inout.EmitChannelError(fmt.Errorf("No active channel."))
+					} else {
+						chMgr.Active.GetRecentMessages(time.Hour * 24)
+					}
 				}
 			case inout.JOIN:
 				chid, err := cmd.NextSubcommand()

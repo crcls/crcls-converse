@@ -6,12 +6,15 @@ import (
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"encoding/json"
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 
 	ipfsDs "github.com/ipfs/go-datastore"
+	"github.com/ipfs/go-datastore/query"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
@@ -59,8 +62,48 @@ func (ch *Channel) Publish(message string) error {
 	return ch.Topic.Publish(ch.ctx, msgBytes)
 }
 
-// func (ch *Channel) GetRecentMessages(to time.Duration) ([]Message, error) {
-// }
+func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]Message, error) {
+	prefix := ch.key.Parent()
+	startTime := time.Now().Add(-timespan)
+
+	q := query.Query{
+		Prefix:   prefix.String(),
+		Orders:   []query.Order{query.OrderByKey{}}, // Optional: Order the results by key
+		KeysOnly: false,                             // Optional: Set to true if you only need the keys
+	}
+
+	results, err := ch.ds.Query(ch.ctx, q)
+	if err != nil {
+		// Handle error
+	}
+	defer results.Close()
+
+	entries := make([]query.Result, 0)
+	for res := range results.Next() {
+		// Extract the key and parse the timestamp
+		key := res.Entry.Key
+		keyParts := strings.Split(key, ":")
+		timestampStr := keyParts[len(keyParts)-1]
+		timestampMicro, err := strconv.ParseInt(timestampStr, 10, 64)
+
+		if err != nil {
+			// Handle error
+			continue
+		}
+
+		timestamp := time.Unix(0, timestampMicro*int64(time.Microsecond))
+
+		if timestamp.After(startTime) {
+			entries = append(entries, res)
+		}
+	}
+
+	msgs := make([]Message, 0)
+
+	fmt.Printf("%+v\n", entries)
+
+	return msgs, nil
+}
 
 func (ch *Channel) Listen() {
 	for {

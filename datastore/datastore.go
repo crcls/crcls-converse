@@ -9,6 +9,8 @@ import (
 
 	ipfslite "github.com/hsanjuan/ipfs-lite"
 	ipfsDs "github.com/ipfs/go-datastore"
+	"github.com/ipfs/go-datastore/query"
+
 	// "github.com/ipfs/go-datastore/query"
 	badger "github.com/ipfs/go-ds-badger3"
 	crdt "github.com/ipfs/go-ds-crdt"
@@ -94,4 +96,8 @@ func (ds *Datastore) Close() error {
 
 func (ds *Datastore) Stats() crdt.Stats {
 	return ds.crdt.InternalStats()
+}
+
+func (ds *Datastore) Query(ctx context.Context, q query.Query) (query.Results, error) {
+	return ds.crdt.Query(ctx, q)
 }

@@ -21,6 +21,7 @@ const (
 	PEERS    = "peers"
 	CHANNELS = "channels"
 	MEMBERS  = "members"
+	MESSAGES = "messages"
 )
 
 type CMD string

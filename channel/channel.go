@@ -48,14 +48,14 @@ func (ch *Channel) Publish(message string) error {
 	}
 
 	// Append the timestamp
-	key := ch.key.Instance(strconv.FormatInt(ts, 10))
+	key := ch.key.ChildString(strconv.FormatInt(ts, 10)).Instance(ch.Host.ID().Pretty())
 
 	// Save the message to the datastore
 	return ch.ds.Put(ch.ctx, key, msgBytes)
 }
 
 func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, error) {
-	prefix := ch.key.Parent()
+	prefix := ch.key
 	startTime := time.Now().Add(-timespan)
 	msgs := make([]inout.Message, 0)
 
@@ -77,7 +77,7 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 		// Extract the key and parse the timestamp
 		key := res.Entry.Key
 		keyParts := strings.Split(key, ":")
-		timestampStr := keyParts[len(keyParts)-1]
+		timestampStr := keyParts[0]
 
 		timestampMicro, err := strconv.ParseInt(timestampStr, 10, 64)
 		if err != nil {
@@ -100,7 +100,7 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 
 		key := ipfsDs.NewKey(entry.Key)
 		base := strings.Split(key.BaseNamespace(), ":")
-		ts, err := strconv.ParseInt(base[1], 10, 64)
+		ts, err := strconv.ParseInt(base[0], 10, 64)
 
 		if err != nil {
 			log.Fatal(err)
@@ -119,13 +119,20 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 }
 
 func (ch *Channel) ListenDatastore() {
+	log.Debug("\nListening to the datastore\n")
 	for {
 		select {
 		case entry := <-ch.ds.EventStream:
+			log.Debugf("--------------------------------\nStream received:\nChannel Key: %s\n", ch.key.Parent().String())
+			log.Debugf("Entry Key: %s\n", entry.Key.String())
 			if entry.Key.IsDescendantOf(ch.key) {
+				log.Debugf("IsDecendent: %s\n", entry.Key.String())
+
 				if ch.IsActive {
+					log.Debug("IsActive\n--------------------------------")
 					ch.EmitReply(entry.Value)
 				} else {
+					log.Debug("Not Active\n------------------------------")
 					ch.Unread += 1
 				}
 			}

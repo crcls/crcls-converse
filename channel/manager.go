@@ -76,7 +76,7 @@ func (chm *ChannelManager) Join(id string) {
 			ctx:      chm.ctx,
 			io:       chm.io,
 			ds:       chm.ds,
-			key:      ipfsDs.KeyWithNamespaces([]string{"channels", id, chm.net.Host.ID().Pretty()}),
+			key:      ipfsDs.KeyWithNamespaces([]string{"channels", id}),
 			ID:       id,
 			Topic:    topic,
 			Host:     chm.net.Host,

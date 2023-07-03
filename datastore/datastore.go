@@ -5,6 +5,7 @@ import (
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"crcls-converse/network"
+	"strings"
 	"time"
 
 	ipfslite "github.com/hsanjuan/ipfs-lite"
@@ -19,6 +20,11 @@ import (
 type EntryEvent struct {
 	Key   ipfsDs.Key
 	Value []byte
+}
+
+func (ee *EntryEvent) Sender() string {
+	base := strings.Split(ee.Key.BaseNamespace(), ":")
+	return base[1]
 }
 
 type Datastore struct {
@@ -72,7 +78,8 @@ func NewDatastore(ctx context.Context, net *network.Network) *Datastore {
 	copts.RebroadcastInterval = time.Second * 3
 	copts.DAGSyncerTimeout = time.Second * 3
 	copts.PutHook = func(key ipfsDs.Key, value []byte) {
-		evtStream <- EntryEvent{key, value}
+		ee := EntryEvent{key, value}
+		evtStream <- ee
 	}
 
 	c, err := crdt.New(d, ipfsDs.NewKey(CRCLS_NS), dag, bcast, copts)

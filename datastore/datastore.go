@@ -5,9 +5,7 @@ import (
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"crcls-converse/network"
-	"fmt"
-
-	// "time"
+	"time"
 
 	ipfslite "github.com/hsanjuan/ipfs-lite"
 	ipfsDs "github.com/ipfs/go-datastore"
@@ -18,9 +16,14 @@ import (
 	crdt "github.com/ipfs/go-ds-crdt"
 )
 
+type EntryEvent struct {
+	Key   ipfsDs.Key
+	Value []byte
+}
+
 type Datastore struct {
 	Badger      *badger.Datastore
-	EventStream chan bool
+	EventStream chan EntryEvent
 	crdt        *crdt.Datastore
 }
 
@@ -53,7 +56,7 @@ func NewDatastore(ctx context.Context, net *network.Network) *Datastore {
 		return nil
 	}
 
-	evtStream := make(chan bool)
+	evtStream := make(chan EntryEvent)
 
 	// copts := crdt.Options{
 	// 	Logger:              log,
@@ -66,8 +69,10 @@ func NewDatastore(ctx context.Context, net *network.Network) *Datastore {
 	// }
 	copts := crdt.DefaultOptions()
 	copts.Logger = log
+	copts.RebroadcastInterval = time.Second * 3
+	copts.DAGSyncerTimeout = time.Second * 3
 	copts.PutHook = func(key ipfsDs.Key, value []byte) {
-		fmt.Printf("%s %v\n", key.String(), string(value))
+		evtStream <- EntryEvent{key, value}
 	}
 
 	c, err := crdt.New(d, ipfsDs.NewKey(CRCLS_NS), dag, bcast, copts)

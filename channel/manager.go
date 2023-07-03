@@ -5,7 +5,9 @@ import (
 	"crcls-converse/datastore"
 	"crcls-converse/inout"
 	"crcls-converse/network"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
@@ -49,6 +51,10 @@ func (chm *ChannelManager) Join(id string) {
 		return
 	}
 
+	for _, value := range chm.channels {
+		value.IsActive = false
+	}
+
 	if ch, ok = chm.channels[id]; !ok {
 		// join the pubsub topic
 		topic, err := chm.net.PubSub.Join(id)
@@ -67,19 +73,45 @@ func (chm *ChannelManager) Join(id string) {
 		ch.Sub = sub
 
 		ch = Channel{
-			ctx:   chm.ctx,
-			io:    chm.io,
-			ds:    chm.ds,
-			key:   ipfsDs.KeyWithNamespaces([]string{id, chm.net.Host.ID().Pretty()}),
-			ID:    id,
-			Topic: topic,
-			Host:  chm.net.Host,
-			Sub:   sub,
+			ctx:      chm.ctx,
+			io:       chm.io,
+			ds:       chm.ds,
+			key:      ipfsDs.KeyWithNamespaces([]string{"channels", id, chm.net.Host.ID().Pretty()}),
+			ID:       id,
+			Topic:    topic,
+			Host:     chm.net.Host,
+			Sub:      sub,
+			IsActive: true,
+			Unread:   0,
 		}
 
-		go ch.Listen()
+		go ch.ListenMessages()
+		go ch.ListenDatastore()
+	} else {
+		ch.IsActive = true
+		ch.Unread = 0
 	}
 
+	history, err := ch.GetRecentMessages(time.Hour * 24 * 7)
+	if err != nil {
+		inout.EmitError(err)
+		history = make([]inout.Message, 0)
+	}
+
+	peers := chm.ListPeers(ch.ID)
+
+	evt := inout.JoinMessage{
+		Type:    "join",
+		Channel: ch.ID,
+		History: history,
+		Members: int64(len(peers)),
+	}
+	data, err := json.Marshal(evt)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ch.io.Write(data)
 	chm.Active = &ch
 }
 

@@ -4,11 +4,23 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
+type Message struct {
+	Message   string `json:"message"`
+	SenderID  string `json:"sender"`
+	Timestamp int64  `json:"timestamp"`
+}
+
 type ReplyMessage struct {
 	Type    string `json:"type"`
 	Sender  string `json:"sender"`
-	Channel string `json:"channel"`
 	Message string `json:"message"`
+}
+
+type JoinMessage struct {
+	Type    string    `json:"type"`
+	Channel string    `json:"channel"`
+	History []Message `json:"history"`
+	Members int64     `json:"members"`
 }
 
 type StatusMessage struct {

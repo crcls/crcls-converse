@@ -75,8 +75,8 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 	entries := make([]query.Result, 0)
 	for res := range results.Next() {
 		// Extract the key and parse the timestamp
-		key := res.Entry.Key
-		keyParts := strings.Split(key, ":")
+		key := ipfsDs.NewKey(res.Entry.Key)
+		keyParts := strings.Split(key.BaseNamespace(), ":")
 		timestampStr := keyParts[0]
 
 		timestampMicro, err := strconv.ParseInt(timestampStr, 10, 64)
@@ -123,16 +123,15 @@ func (ch *Channel) ListenDatastore() {
 	for {
 		select {
 		case entry := <-ch.ds.EventStream:
-			log.Debugf("--------------------------------\nStream received:\nChannel Key: %s\n", ch.key.Parent().String())
-			log.Debugf("Entry Key: %s\n", entry.Key.String())
-			if entry.Key.IsDescendantOf(ch.key) {
+			log.Debugf("\n--------------------------------\nStream received:\nChannel Key: %s\nEntry Key: %s\n", ch.key.String(), entry.Key.String())
+			if entry.Key.IsDescendantOf(ch.key) && ch.Host.ID().Pretty() != entry.Sender() {
 				log.Debugf("IsDecendent: %s\n", entry.Key.String())
 
 				if ch.IsActive {
-					log.Debug("IsActive\n--------------------------------")
+					log.Debug("\n\nIsActive\n--------------------------------\n")
 					ch.EmitReply(entry.Value)
 				} else {
-					log.Debug("Not Active\n------------------------------")
+					log.Debug("\n\nNot Active\n------------------------------\n")
 					ch.Unread += 1
 				}
 			}

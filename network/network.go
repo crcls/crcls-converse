@@ -3,12 +3,14 @@ package network
 import (
 	"context"
 	"crcls-converse/account"
+	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 
@@ -40,6 +42,7 @@ type ConnectionStatus struct {
 type Network struct {
 	Peers      []*peer.PeerRecord
 	Port       int
+	PubSub     *pubsub.PubSub
 	Connected  bool
 	Host       host.Host
 	DHT        *kaddht.IpfsDHT
@@ -61,6 +64,14 @@ func (net *Network) startClient(ctx context.Context, identity crypto.PrivKey) er
 
 	h.Network().Notify(&Notifee{net})
 	net.Host = h
+
+	ps, err := pubsub.NewGossipSub(ctx, h)
+	if err != nil {
+		inout.EmitChannelError(err)
+		return nil
+	}
+
+	net.PubSub = ps
 
 	return nil
 }

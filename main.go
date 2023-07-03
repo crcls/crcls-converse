@@ -45,7 +45,7 @@ func main() {
 	ds := datastore.NewDatastore(ctx, net)
 	log.Debugf("%+v", ds.Stats())
 
-	chMgr := channel.NewManager(ctx, net.Host, io, ds)
+	chMgr := channel.NewManager(ctx, net, io, ds)
 
 	readyEvent, err := json.Marshal(&inout.ReadyMessage{Type: "ready", Status: "connected", Host: net.Host.ID(), PeerCount: int64(len(net.Peers))})
 	if err != nil {

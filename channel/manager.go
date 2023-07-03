@@ -4,13 +4,12 @@ import (
 	"context"
 	"crcls-converse/datastore"
 	"crcls-converse/inout"
+	"crcls-converse/network"
 	"fmt"
 
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	ipfsDs "github.com/ipfs/go-datastore"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
 type ChannelManager struct {
@@ -18,24 +17,16 @@ type ChannelManager struct {
 	channels map[string]Channel
 	io       *inout.IO
 	ds       *datastore.Datastore
-	host     host.Host
-	ps       *pubsub.PubSub
+	net      *network.Network
 	Active   *Channel
 }
 
-func NewManager(ctx context.Context, h host.Host, io *inout.IO, ds *datastore.Datastore) *ChannelManager {
-	ps, err := pubsub.NewGossipSub(ctx, h)
-	if err != nil {
-		inout.EmitChannelError(err)
-		return nil
-	}
-
+func NewManager(ctx context.Context, net *network.Network, io *inout.IO, ds *datastore.Datastore) *ChannelManager {
 	ch := &ChannelManager{
-		ctx:  ctx,
-		ps:   ps,
-		host: h,
-		io:   io,
-		ds:   ds,
+		ctx: ctx,
+		net: net,
+		io:  io,
+		ds:  ds,
 	}
 
 	return ch
@@ -60,7 +51,7 @@ func (chm *ChannelManager) Join(id string) {
 
 	if ch, ok = chm.channels[id]; !ok {
 		// join the pubsub topic
-		topic, err := chm.ps.Join(id)
+		topic, err := chm.net.PubSub.Join(id)
 		if err != nil {
 			inout.EmitChannelError(err)
 			return
@@ -79,10 +70,10 @@ func (chm *ChannelManager) Join(id string) {
 			ctx:   chm.ctx,
 			io:    chm.io,
 			ds:    chm.ds,
-			key:   ipfsDs.KeyWithNamespaces([]string{id, chm.host.ID().Pretty()}),
+			key:   ipfsDs.KeyWithNamespaces([]string{id, chm.net.Host.ID().Pretty()}),
 			ID:    id,
 			Topic: topic,
-			Host:  chm.host,
+			Host:  chm.net.Host,
 			Sub:   sub,
 		}
 
@@ -93,7 +84,7 @@ func (chm *ChannelManager) Join(id string) {
 }
 
 func (chm *ChannelManager) ListPeers(id string) []peer.ID {
-	return chm.ps.ListPeers(id)
+	return chm.net.PubSub.ListPeers(id)
 }
 
 func (chm *ChannelManager) ListChannels() []string {

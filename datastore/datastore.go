@@ -14,7 +14,6 @@ import (
 	// "github.com/ipfs/go-datastore/query"
 	badger "github.com/ipfs/go-ds-badger3"
 	crdt "github.com/ipfs/go-ds-crdt"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
 type Datastore struct {
@@ -39,13 +38,7 @@ func NewDatastore(ctx context.Context, net *network.Network) *Datastore {
 		return nil
 	}
 
-	ps, err := pubsub.NewGossipSub(ctx, net.Host)
-	if err != nil {
-		inout.EmitChannelError(err)
-		return nil
-	}
-
-	bcast, err := crdt.NewPubSubBroadcaster(ctx, ps, CRCLS_NS)
+	bcast, err := crdt.NewPubSubBroadcaster(ctx, net.PubSub, CRCLS_NS)
 	if err != nil {
 		inout.EmitChannelError(err)
 		return nil

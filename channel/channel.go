@@ -56,11 +56,7 @@ func (ch *Channel) Publish(message string) error {
 	key := ch.key.Instance(strconv.FormatInt(ts, 10))
 
 	// Save the message to the datastore
-	if err := ch.ds.Put(ch.ctx, key, msgBytes); err != nil {
-		inout.EmitError(err)
-	}
-
-	return ch.Topic.Publish(ch.ctx, msgBytes)
+	return ch.ds.Put(ch.ctx, key, msgBytes)
 }
 
 func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]Message, error) {

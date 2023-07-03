@@ -63,7 +63,8 @@ func main() {
 			case inout.LIST:
 				subcmd, err := cmd.NextSubcommand()
 				if err != nil {
-					log.Fatal(err)
+					inout.EmitError(err)
+					break
 				}
 
 				switch subcmd {
@@ -91,45 +92,46 @@ func main() {
 					io.Write(peers)
 				case inout.MESSAGES:
 					if chMgr.Active == nil {
-						inout.EmitChannelError(fmt.Errorf("No active channel."))
+						inout.EmitError(fmt.Errorf("No active channel."))
 					} else {
 						sscmd, err := cmd.NextSubcommand()
 						if err != nil {
-							log.Fatal(err)
+							inout.EmitError(err)
+						} else {
+							days, err := strconv.ParseInt(string(sscmd), 10, 64)
+							if err != nil {
+								log.Fatal(err)
+							}
+							dur := time.Hour * time.Duration(24*days)
+							chMgr.Active.GetRecentMessages(dur)
 						}
-						days, err := strconv.ParseInt(string(sscmd), 10, 64)
-						if err != nil {
-							log.Fatal(err)
-						}
-						dur := time.Hour * time.Duration(24*days)
-						chMgr.Active.GetRecentMessages(dur)
 					}
 				}
 			case inout.JOIN:
 				chid, err := cmd.NextSubcommand()
 				if err != nil {
-					log.Fatal(err)
+					inout.EmitError(err)
+				} else {
+					chMgr.Join(string(chid))
 				}
-
-				chMgr.Join(string(chid))
 			case inout.REPLY:
 				if chMgr.Active == nil {
-					inout.EmitChannelError(fmt.Errorf("No active channel."))
+					inout.EmitError(fmt.Errorf("No active channel."))
 				} else {
 					chMgr.Active.Publish(string(cmd.Data))
 				}
 			}
 		case status := <-net.StatusChan:
 			if status.Error != nil {
-				log.Fatal(status.Error)
-			}
+				inout.EmitError(status.Error)
+			} else {
+				data, err := json.Marshal(inout.PeerMessage{Type: "peer", Connected: status.Connected, Id: status.Peer.PeerID})
+				if err != nil {
+					log.Fatal(err)
+				}
 
-			data, err := json.Marshal(inout.PeerMessage{Type: "peer", Connected: status.Connected, Id: status.Peer.PeerID})
-			if err != nil {
-				log.Fatal(err)
+				io.Write(data)
 			}
-
-			io.Write(data)
 		case <-stop:
 			cancel()
 			break

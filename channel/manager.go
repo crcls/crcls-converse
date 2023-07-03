@@ -45,7 +45,7 @@ func (chm *ChannelManager) Join(id string) {
 	}
 
 	if !found {
-		inout.EmitChannelError(fmt.Errorf("Channel not found. %s", id))
+		inout.EmitError(fmt.Errorf("Channel not found. %s", id))
 		return
 	}
 
@@ -53,14 +53,14 @@ func (chm *ChannelManager) Join(id string) {
 		// join the pubsub topic
 		topic, err := chm.net.PubSub.Join(id)
 		if err != nil {
-			inout.EmitChannelError(err)
+			inout.EmitError(err)
 			return
 		}
 
 		// and subscribe to it
 		sub, err := topic.Subscribe()
 		if err != nil {
-			inout.EmitChannelError(err)
+			inout.EmitError(err)
 			return
 		}
 

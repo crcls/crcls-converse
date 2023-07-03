@@ -48,14 +48,14 @@ func (ic *InputCommand) NextSubcommand() (CMD, error) {
 }
 
 func parseNext(in []byte) (CMD, []byte, error) {
-	if len(in) < 2 {
+	if len(in) == 0 {
 		return "", nil, fmt.Errorf("Data empty.")
 	}
 
 	var next []byte
 	var rest []byte
 	for i, b := range in {
-		if b == ' ' || b == '\n' {
+		if b == ' ' {
 			rest = in[i:]
 			break
 		}
@@ -63,11 +63,12 @@ func parseNext(in []byte) (CMD, []byte, error) {
 		next = append(next, b)
 	}
 
+	// Drop the leading space for rest.
 	if len(rest) > 0 {
 		rest = rest[1:]
 	}
 
-	return CMD(next), rest, nil // Drop the leading space for rest.
+	return CMD(next), rest, nil
 }
 
 func parseCommand(in []byte) (*InputCommand, error) {

@@ -57,7 +57,7 @@ func (ch *Channel) Publish(message string) error {
 
 	// Save the message to the datastore
 	if err := ch.ds.Put(ch.ctx, key, msgBytes); err != nil {
-		inout.EmitChannelError(err)
+		inout.EmitError(err)
 	}
 
 	return ch.Topic.Publish(ch.ctx, msgBytes)
@@ -109,7 +109,7 @@ func (ch *Channel) Listen() {
 	for {
 		response, err := ch.Sub.Next(ch.ctx)
 		if err != nil {
-			inout.EmitChannelError(err)
+			inout.EmitError(err)
 			return
 		}
 		// only forward messages delivered by others
@@ -119,7 +119,7 @@ func (ch *Channel) Listen() {
 
 		message := Message{}
 		if err := json.Unmarshal(response.Data, &message); err != nil {
-			inout.EmitChannelError(err)
+			inout.EmitError(err)
 		}
 
 		data, err := json.Marshal(&inout.ReplyMessage{
@@ -130,7 +130,7 @@ func (ch *Channel) Listen() {
 		})
 
 		if err != nil {
-			inout.EmitChannelError(err)
+			inout.EmitError(err)
 		}
 
 		ch.io.Write(data)

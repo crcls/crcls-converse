@@ -6,18 +6,13 @@ import (
 
 type ErrorMessage struct {
 	Type    string `json:"type"`
-	message string
+	Message string
 }
 
-type ChannelError struct {
-	Type  string `json:"type"`
-	Error string `json:"error"`
-}
-
-func EmitChannelError(err error) {
-	data, merr := json.Marshal(&ChannelError{
-		Type:  "error",
-		Error: err.Error(),
+func EmitError(err error) {
+	data, merr := json.Marshal(&ErrorMessage{
+		Type:    "error",
+		Message: err.Error(),
 	})
 	if merr != nil {
 		log.Fatal(merr)

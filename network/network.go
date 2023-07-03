@@ -67,7 +67,7 @@ func (net *Network) startClient(ctx context.Context, identity crypto.PrivKey) er
 
 	ps, err := pubsub.NewGossipSub(ctx, h)
 	if err != nil {
-		inout.EmitChannelError(err)
+		inout.EmitError(err)
 		return nil
 	}
 

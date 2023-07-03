@@ -34,19 +34,19 @@ func NewDatastore(ctx context.Context, net *network.Network) *Datastore {
 	// }
 	d, err := badger.NewDatastore(STORE_DIR, &badger.DefaultOptions)
 	if err != nil {
-		inout.EmitChannelError(err)
+		inout.EmitError(err)
 		return nil
 	}
 
 	bcast, err := crdt.NewPubSubBroadcaster(ctx, net.PubSub, CRCLS_NS)
 	if err != nil {
-		inout.EmitChannelError(err)
+		inout.EmitError(err)
 		return nil
 	}
 
 	dag, err := ipfslite.New(ctx, d, nil, net.Host, net.DHT, nil)
 	if err != nil {
-		inout.EmitChannelError(err)
+		inout.EmitError(err)
 		return nil
 	}
 

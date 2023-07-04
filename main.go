@@ -4,50 +4,61 @@ import (
 	"context"
 	"crcls-converse/account"
 	"crcls-converse/channel"
+	"crcls-converse/config"
 	"crcls-converse/datastore"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"crcls-converse/network"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
-)
 
-var (
-	portFlag    = flag.Int("p", 0, "PORT to connect on. 3123-3130")
-	verboseFlag = flag.Bool("verbose", false, "Verbose output")
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 var log = logger.GetLogger()
 
+type ReadyMessage struct {
+	Type   string          `json:"type"`
+	Status string          `json:"status"`
+	Host   peer.ID         `json:"host"`
+	Member *account.Member `json:"member"`
+}
+
 func main() {
-	flag.Parse()
-
-	if *verboseFlag {
-		logger.SetLogLevel("debug")
-	} else {
-		logger.SetLogLevel("info")
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
-
-	a := account.New()
+	conf := config.New()
 	io := inout.Connect()
 
-	net := network.New(*portFlag)
-	net.Connect(ctx, a)
+	a := account.Load(conf, io)
+	netw := network.New(conf)
+	netw.Connect(ctx, a)
+	ds := datastore.NewDatastore(ctx, netw.Host, netw.PubSub, netw.DHT)
+	chMgr := channel.NewManager(ctx, netw, io, ds)
 
-	ds := datastore.NewDatastore(ctx, net)
-	log.Debugf("%+v", ds.Stats())
+	if a.Wallet != nil {
+		balance, err := a.Wallet.Balance()
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	chMgr := channel.NewManager(ctx, net, io, ds)
+		log.Debugf("\n\n-----------------------\nWallet Connected\n-----------------------\nAddress: %s\nSeed Phrase: %s\nBalance: %d\n-----------------------\n", a.Wallet.Address, a.Wallet.SeedPhrase, balance)
 
-	readyEvent, err := json.Marshal(&inout.ReadyMessage{Type: "ready", Status: "connected", Host: net.Host.ID(), PeerCount: int64(len(net.Peers))})
+		ctxTO, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		defer cancel()
+
+		member, err := account.GetMember(ctxTO, a.Wallet.Address)
+		if err != nil {
+			log.Debug(err)
+		}
+		a.Member = member
+	}
+
+	readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", Host: netw.Host.ID(), Member: a.Member})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -64,7 +75,7 @@ func main() {
 				subcmd, err := cmd.NextSubcommand()
 				if err != nil {
 					inout.EmitError(err)
-					break
+					continue
 				}
 
 				switch subcmd {
@@ -83,7 +94,7 @@ func main() {
 					peers, err := json.Marshal(&inout.ListPeersMessage{
 						Type:    "list",
 						Subject: subcmd,
-						Peers:   net.Peers,
+						Peers:   netw.Peers,
 					})
 					if err != nil {
 						log.Fatal(err)
@@ -120,8 +131,48 @@ func main() {
 				} else {
 					chMgr.Active.Publish(string(cmd.Data))
 				}
+			case inout.MEMBER:
+				subcmd, err := cmd.NextSubcommand()
+				if err != nil {
+					inout.EmitError(err)
+					continue
+				}
+
+				switch subcmd {
+				case inout.CREATE:
+					if a.Wallet != nil {
+						inout.EmitError(fmt.Errorf("Already joined."))
+						continue
+					}
+
+					member := &account.Member{}
+					if err := json.Unmarshal(cmd.Data, member); err != nil {
+						inout.EmitError(err)
+						continue
+					}
+
+					a.CreateWallet()
+
+					prettyAddress, err := a.Wallet.Address.MarshalText()
+					if err != nil {
+						panic(err)
+					}
+					fmt.Printf("\nMain: Pretty Address: %v\n\n", string(prettyAddress))
+
+					if err := account.NewMember(ctx, a, member); err != nil {
+						inout.EmitError(err)
+						continue
+					}
+
+					evt := inout.MemberChangeMessage{Type: "memberChange"}
+					data, err := json.Marshal(evt)
+					if err != nil {
+						log.Fatal(err)
+					}
+					io.Write(data)
+				}
 			}
-		case status := <-net.StatusChan:
+		case status := <-netw.StatusChan:
 			if status.Error != nil {
 				inout.EmitError(status.Error)
 			} else {

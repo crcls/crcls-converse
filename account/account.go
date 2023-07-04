@@ -1,15 +1,47 @@
 package account
 
 import (
+	"crcls-converse/config"
+	"crcls-converse/evm"
+	"crcls-converse/inout"
+	"crcls-converse/logger"
 	"crypto/rand"
+	"encoding/json"
 	"io/ioutil"
+	"net"
 	"os"
+	"path/filepath"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 )
 
+var log = logger.GetLogger()
+
 type Account struct {
-	PK crypto.PrivKey
+	config *config.Config
+	HostPk crypto.PrivKey
+	IP     []byte
+	Wallet *evm.Wallet
+	Member *Member
+}
+
+func (a *Account) CreateWallet() *evm.Wallet {
+	wallet := evm.New(a.config)
+	a.Wallet = wallet
+
+	return wallet
+}
+
+func getIpAddress() (*net.UDPAddr, error) {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	ipAddress := conn.LocalAddr().(*net.UDPAddr)
+
+	return ipAddress, nil
 }
 
 func GetIdentity(keyFile string) crypto.PrivKey {
@@ -22,14 +54,12 @@ func GetIdentity(keyFile string) crypto.PrivKey {
 			panic(err)
 		}
 
-		// save the private key to file
 		keyBytes, err := crypto.MarshalPrivateKey(priv)
 		if err != nil {
 			panic(err)
 		}
-		// TODO: make sure the directory exists
-		err = ioutil.WriteFile(keyFile, keyBytes, 0600)
-		if err != nil {
+
+		if err = ioutil.WriteFile(keyFile, keyBytes, 0600); err != nil {
 			panic(err)
 		}
 	} else {
@@ -47,9 +77,36 @@ func GetIdentity(keyFile string) crypto.PrivKey {
 	return priv
 }
 
-func New() *Account {
-	// TODO: find a better place for the keyfile
-	pk := GetIdentity("./crcls_keyfile.pem")
+func Load(conf *config.Config, io *inout.IO) *Account {
+	hpk := GetIdentity(filepath.Join(conf.CrclsDir, "host_keyfile.pem"))
 
-	return &Account{pk}
+	ip, err := getIpAddress()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	account := &Account{
+		config: conf,
+		HostPk: hpk,
+		IP:     []byte(ip.IP),
+	}
+
+	// TODO: support more chains
+	privKey, err := evm.LoadAccount(filepath.Join(conf.CrclsDir, "wallet_pk"))
+	if err != nil {
+		evt := inout.NoAccountMessage{Type: "No account"}
+
+		data, err := json.Marshal(evt)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		io.Write(data)
+	} else {
+		wallet := evm.NewWallet(privKey)
+
+		account.Wallet = wallet
+	}
+
+	return account
 }

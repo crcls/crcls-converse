@@ -34,11 +34,8 @@ type PeerMessage struct {
 	Id        peer.ID `json:"id"`
 }
 
-type ReadyMessage struct {
-	Type      string  `json:"type"`
-	Status    string  `json:"status"`
-	Host      peer.ID `json:"host"`
-	PeerCount int64   `json:"peerCount"`
+type NoAccountMessage struct {
+	Type string `json:"type"`
 }
 
 type ListChannelsMessage struct {
@@ -51,4 +48,8 @@ type ListPeersMessage struct {
 	Type    string             `json:"type"`
 	Subject CMD                `json:"subject"`
 	Peers   []*peer.PeerRecord `json:"peers"`
+}
+
+type MemberChangeMessage struct {
+	Type string `json:"type"`
 }

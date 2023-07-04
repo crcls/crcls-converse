@@ -1,7 +1,7 @@
 package network
 
 import (
-	"github.com/libp2p/go-libp2p/core/network"
+	net "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 )
@@ -10,15 +10,15 @@ type Notifee struct {
 	net *Network
 }
 
-func (n *Notifee) Listen(network.Network, ma.Multiaddr) {
+func (n *Notifee) Listen(net.Network, ma.Multiaddr) {
 	log.Debug("Listen called")
 }
 
-func (n *Notifee) ListenClose(network.Network, ma.Multiaddr) {
+func (n *Notifee) ListenClose(net.Network, ma.Multiaddr) {
 	log.Debug("ListenClose called")
 }
 
-func (n *Notifee) Connected(net network.Network, con network.Conn) {
+func (n *Notifee) Connected(netw net.Network, con net.Conn) {
 	// peerRecord := net.Peerstore().PeerInfo(con.RemotePeer())
 
 	// adding := true
@@ -34,8 +34,8 @@ func (n *Notifee) Connected(net network.Network, con network.Conn) {
 	// }
 }
 
-func (n *Notifee) Disconnected(net network.Network, con network.Conn) {
-	peerRecord := net.Peerstore().PeerInfo(con.RemotePeer())
+func (n *Notifee) Disconnected(netw net.Network, con net.Conn) {
+	peerRecord := netw.Peerstore().PeerInfo(con.RemotePeer())
 
 	for i, p := range n.net.Peers {
 		if p.PeerID == peerRecord.ID {
@@ -61,10 +61,10 @@ func (n *Notifee) Disconnected(net network.Network, con network.Conn) {
 	}
 }
 
-func (n *Notifee) OpenedStream(network.Network, network.Stream) {
+func (n *Notifee) OpenedStream(net.Network, net.Stream) {
 	log.Debug("OpenedStream called")
 }
 
-func (n *Notifee) ClosedStream(network.Network, network.Stream) {
+func (n *Notifee) ClosedStream(net.Network, net.Stream) {
 	log.Debug("ClosedStream called")
 }

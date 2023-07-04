@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"crcls-converse/account"
+	"crcls-converse/config"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"fmt"
@@ -179,7 +180,7 @@ func (net *Network) discoverPeers(ctx context.Context) {
 }
 
 func (net *Network) Connect(ctx context.Context, acc *account.Account) {
-	if err := net.startClient(ctx, acc.PK); err != nil {
+	if err := net.startClient(ctx, acc.HostPk); err != nil {
 		net.StatusChan <- ConnectionStatus{
 			Error:     err,
 			Connected: false,
@@ -196,10 +197,10 @@ func (net *Network) Connect(ctx context.Context, acc *account.Account) {
 	go net.discoverPeers(ctx)
 }
 
-func New(port int) *Network {
+func New(conf *config.Config) *Network {
 	return &Network{
 		Connected:  false,
-		Port:       port,
+		Port:       conf.Port,
 		StatusChan: make(chan ConnectionStatus),
 		Peers:      make([]*peer.PeerRecord, 0),
 	}

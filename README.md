@@ -42,11 +42,11 @@ There are only a couple commands so far. All commands start with a / (slash) and
 
 **/list channels**
 
-This command will respond with a JSON object that lists the registered channels. (So far only the global channle is availble.)
+This command will respond with a JSON object that lists the registered channels. (So far only the global channel is availble.)
 
 **/join {channelName}**
 
-Join a channle by passing the channel name to this command. Eg. `/join global`
+Join a channel by passing the channel name to this command. Eg. `/join global`
 
 **/reply {message}**
 

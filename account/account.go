@@ -6,7 +6,6 @@ import (
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"crypto/rand"
-	"encoding/json"
 	"io/ioutil"
 	"net"
 	"os"
@@ -14,8 +13,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 )
-
-var log = logger.GetLogger()
 
 type Account struct {
 	config *config.Config
@@ -78,6 +75,7 @@ func GetIdentity(keyFile string) crypto.PrivKey {
 }
 
 func Load(conf *config.Config, io *inout.IO) *Account {
+	log := logger.GetLogger()
 	hpk := GetIdentity(filepath.Join(conf.CrclsDir, "host_keyfile.pem"))
 
 	ip, err := getIpAddress()
@@ -93,18 +91,8 @@ func Load(conf *config.Config, io *inout.IO) *Account {
 
 	// TODO: support more chains
 	privKey, err := evm.LoadAccount(filepath.Join(conf.CrclsDir, "wallet_pk"))
-	if err != nil {
-		evt := inout.NoAccountMessage{Type: "No account"}
-
-		data, err := json.Marshal(evt)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		io.Write(data)
-	} else {
+	if err == nil {
 		wallet := evm.NewWallet(privKey)
-
 		account.Wallet = wallet
 	}
 

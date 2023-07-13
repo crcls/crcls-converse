@@ -4,36 +4,29 @@ import "fmt"
 
 // Commands
 
-// /list peers|channels|members
-// /join {room}
-// /leave {room}
-// /reply {member id}? - sends a message to the channel (add member id for direct reply)
-// /member - Member opts
-
+// TODO: Organize this better
 const (
-	LIST   = "list"
-	JOIN   = "join"
-	LEAVE  = "leave"
-	REPLY  = "reply"
-	MEMBER = "member"
+	LIST    = "list"
+	JOIN    = "join"
+	LEAVE   = "leave"
+	REPLY   = "reply"
+	MEMBER  = "member"
+	ACCOUNT = "account"
+	READY   = "ready"
 )
 
-// LIST sub-commands
+// sub-commands
 const (
 	PEERS    = "peers"
 	CHANNELS = "channels"
 	MEMBERS  = "members"
 	MESSAGES = "messages"
-)
-
-// MEMBER sub-commands
-const (
-	CREATE = "create"
+	CREATE   = "create"
 )
 
 type CMD string
 
-var CMDS = [5]CMD{LIST, JOIN, LEAVE, REPLY, MEMBER}
+var CMDS = [7]CMD{LIST, JOIN, LEAVE, REPLY, MEMBER, ACCOUNT, READY}
 
 type InputCommand struct {
 	Type    string

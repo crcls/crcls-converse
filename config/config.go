@@ -7,8 +7,6 @@ import (
 	"path"
 )
 
-var log = logger.GetLogger()
-
 type Config struct {
 	HomeDir  string
 	CrclsDir string
@@ -18,15 +16,24 @@ type Config struct {
 var (
 	portFlag    = flag.Int("p", 0, "PORT to connect on. 3123-3130")
 	verboseFlag = flag.Bool("verbose", false, "Verbose output")
+	logFile     = flag.String("logfile", "", "Pass the path to a file to write logs to.")
 )
 
-func New() *Config {
+func init() {
 	flag.Parse()
+}
+
+func New() *Config {
+	log := logger.GetLogger()
 
 	if *verboseFlag {
 		logger.SetLogLevel("debug")
 	} else {
 		logger.SetLogLevel("info")
+	}
+
+	if len(*logFile) > 0 {
+		logger.SetLogFile(*logFile)
 	}
 
 	hd, err := os.UserHomeDir()

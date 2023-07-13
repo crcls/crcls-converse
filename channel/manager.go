@@ -4,6 +4,7 @@ import (
 	"context"
 	"crcls-converse/datastore"
 	"crcls-converse/inout"
+	"crcls-converse/logger"
 	"crcls-converse/network"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	ipfsDs "github.com/ipfs/go-datastore"
+	logging "github.com/ipfs/go-log/v2"
 )
 
 type ChannelManager struct {
@@ -21,14 +23,17 @@ type ChannelManager struct {
 	ds       *datastore.Datastore
 	net      *network.Network
 	Active   *Channel
+	log      *logging.ZapEventLogger
 }
 
 func NewManager(ctx context.Context, net *network.Network, io *inout.IO, ds *datastore.Datastore) *ChannelManager {
+	log := logger.GetLogger()
 	ch := &ChannelManager{
 		ctx: ctx,
 		net: net,
 		io:  io,
 		ds:  ds,
+		log: log,
 	}
 
 	return ch
@@ -77,9 +82,10 @@ func (chm *ChannelManager) Join(id string) {
 			io:       chm.io,
 			ds:       chm.ds,
 			key:      ipfsDs.KeyWithNamespaces([]string{"channels", id}),
+			log:      chm.log,
 			ID:       id,
 			Topic:    topic,
-			Host:     chm.net.Host,
+			Host:     (*chm.net.Host),
 			Sub:      sub,
 			IsActive: true,
 			Unread:   0,
@@ -108,7 +114,7 @@ func (chm *ChannelManager) Join(id string) {
 	}
 	data, err := json.Marshal(evt)
 	if err != nil {
-		log.Fatal(err)
+		chm.log.Fatal(err)
 	}
 
 	ch.io.Write(data)

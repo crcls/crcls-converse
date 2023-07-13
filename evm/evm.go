@@ -1,7 +1,6 @@
 package evm
 
 import (
-	"crcls-converse/logger"
 	"crypto/ecdsa"
 	"fmt"
 	"os"
@@ -9,8 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/tyler-smith/go-bip39"
 )
-
-var log = logger.GetLogger()
 
 func GenerateAccount(keypath string) (*ecdsa.PrivateKey, error) {
 	privKey, err := crypto.GenerateKey()

@@ -3,6 +3,7 @@ package evm
 import (
 	"context"
 	"crcls-converse/config"
+	"crcls-converse/logger"
 	"crypto/ecdsa"
 	"fmt"
 	"math/big"
@@ -13,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
+	logging "github.com/ipfs/go-log/v2"
 )
 
 var RPC = os.Getenv("POLYGON_RPC")
@@ -24,6 +26,7 @@ type Wallet struct {
 	PrivKey    *ecdsa.PrivateKey
 	PubKey     ecdsa.PublicKey
 	SeedPhrase string
+	log        *logging.ZapEventLogger
 }
 
 func (w *Wallet) Balance() (*big.Int, error) {
@@ -47,6 +50,7 @@ func WeiToEth(wei *big.Int) *big.Float {
 }
 
 func NewWallet(pk *ecdsa.PrivateKey) *Wallet {
+	log := logger.GetLogger()
 	seed, err := GenerateSeedPhrase(pk)
 	if err != nil {
 		log.Fatal(err)
@@ -63,10 +67,12 @@ func NewWallet(pk *ecdsa.PrivateKey) *Wallet {
 		PrivKey:    pk,
 		PubKey:     pk.PublicKey,
 		SeedPhrase: seed,
+		log:        log,
 	}
 }
 
 func New(conf *config.Config) *Wallet {
+	log := logger.GetLogger()
 	priv, err := GenerateAccount(filepath.Join(conf.CrclsDir, "wallet_pk"))
 	if err != nil {
 		log.Fatal(err)

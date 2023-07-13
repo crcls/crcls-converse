@@ -4,7 +4,6 @@ import (
 	"context"
 	"crcls-converse/datastore"
 	"crcls-converse/inout"
-	"crcls-converse/logger"
 	"encoding/json"
 	"strconv"
 	"strings"
@@ -14,10 +13,9 @@ import (
 
 	ipfsDs "github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
+	logging "github.com/ipfs/go-log/v2"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
-
-var log = logger.GetLogger()
 
 type Channel struct {
 	ctx      context.Context
@@ -30,6 +28,7 @@ type Channel struct {
 	Host     host.Host
 	IsActive bool
 	Unread   int16
+	log      *logging.ZapEventLogger
 }
 
 func (ch *Channel) Publish(message string) error {
@@ -47,11 +46,32 @@ func (ch *Channel) Publish(message string) error {
 		return err
 	}
 
+	hid, err := ch.Host.ID().MarshalText()
+	if err != nil {
+		return err
+	}
+
 	// Append the timestamp
-	key := ch.key.ChildString(strconv.FormatInt(ts, 10)).Instance(ch.Host.ID().Pretty())
+	key := ch.key.ChildString(strconv.FormatInt(ts, 10)).Instance(string(hid))
 
 	// Save the message to the datastore
-	return ch.ds.Put(ch.ctx, key, msgBytes)
+	if err = ch.ds.Put(ch.ctx, key, msgBytes); err != nil {
+		return err
+	}
+
+	msg := inout.StatusMessage{
+		Type:   "replyStatus",
+		Status: "sent",
+	}
+
+	data, err := json.Marshal(&msg)
+	if err != nil {
+		ch.log.Fatal(data)
+	}
+
+	ch.io.Write(data)
+
+	return nil
 }
 
 func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, error) {
@@ -67,7 +87,7 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 
 	results, err := ch.ds.Query(ch.ctx, q)
 	if err != nil {
-		log.Debug(err)
+		ch.log.Debug(err)
 		return msgs, err
 	}
 	defer results.Close()
@@ -81,7 +101,7 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 
 		timestampMicro, err := strconv.ParseInt(timestampStr, 10, 64)
 		if err != nil {
-			log.Debug(err)
+			ch.log.Debug(err)
 			continue
 		}
 		timestamp := time.Unix(0, timestampMicro*int64(time.Microsecond))
@@ -94,7 +114,7 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 	for _, entry := range entries {
 		reply := inout.ReplyMessage{}
 		if err := json.Unmarshal(entry.Value, &reply); err != nil {
-			log.Error(err)
+			ch.log.Error(err)
 			continue
 		}
 
@@ -103,7 +123,7 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 		ts, err := strconv.ParseInt(base[0], 10, 64)
 
 		if err != nil {
-			log.Fatal(err)
+			ch.log.Fatal(err)
 		}
 
 		msg := inout.Message{
@@ -119,19 +139,16 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 }
 
 func (ch *Channel) ListenDatastore() {
-	log.Debug("\nListening to the datastore\n")
+	ch.log.Debug("\nListening to the datastore\n")
 	for {
 		select {
 		case entry := <-ch.ds.EventStream:
-			log.Debugf("\n--------------------------------\nStream received:\nChannel Key: %s\nEntry Key: %s\n", ch.key.String(), entry.Key.String())
 			if entry.Key.IsDescendantOf(ch.key) && ch.Host.ID().Pretty() != entry.Sender() {
-				log.Debugf("IsDecendent: %s\n", entry.Key.String())
+				ch.log.Debugf("IsDecendent: %s\n", entry.Key.String())
 
 				if ch.IsActive {
-					log.Debug("\n\nIsActive\n--------------------------------\n")
 					ch.EmitReply(entry.Value)
 				} else {
-					log.Debug("\n\nNot Active\n------------------------------\n")
 					ch.Unread += 1
 				}
 			}
@@ -153,7 +170,7 @@ func (ch *Channel) ListenMessages() {
 			continue
 		}
 
-		log.Debugf("Topic message: %+v\n", response)
+		ch.log.Debugf("Topic message: %+v\n", response)
 
 		// TODO: Decide what the open topic PubSub should be used for.
 	}

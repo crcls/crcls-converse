@@ -17,6 +17,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/host"
 
+	logging "github.com/ipfs/go-log/v2"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
@@ -28,8 +29,6 @@ const DiscoveryServiceTag = "crcls-converse"
 
 const ProtocolName = "/crcls"
 const ProtocolVersion = "0.0.1"
-
-var log = logger.GetLogger()
 
 // Backoff discovery by increasing this value
 var discInterval = time.Second
@@ -45,9 +44,10 @@ type Network struct {
 	Port       int
 	PubSub     *pubsub.PubSub
 	Connected  bool
-	Host       host.Host
+	Host       *host.Host
 	DHT        *kaddht.IpfsDHT
 	StatusChan chan ConnectionStatus
+	log        *logging.ZapEventLogger
 }
 
 func (net *Network) startClient(ctx context.Context, identity crypto.PrivKey) error {
@@ -63,8 +63,8 @@ func (net *Network) startClient(ctx context.Context, identity crypto.PrivKey) er
 		return err
 	}
 
-	h.Network().Notify(&Notifee{net})
-	net.Host = h
+	h.Network().Notify(&Notifee{net: net, log: net.log})
+	net.Host = &h
 
 	ps, err := pubsub.NewGossipSub(ctx, h)
 	if err != nil {
@@ -85,7 +85,7 @@ func (net *Network) initDHT(ctx context.Context) error {
 		return err
 	}
 
-	dht, err = kaddht.New(ctx, net.Host, kaddht.Mode(kaddht.ModeClient), kaddht.RoutingTableFilter(kaddht.PublicRoutingTableFilter))
+	dht, err = kaddht.New(ctx, *net.Host, kaddht.Mode(kaddht.ModeClient), kaddht.RoutingTableFilter(kaddht.PublicRoutingTableFilter))
 
 	if err != nil {
 		return err
@@ -98,8 +98,8 @@ func (net *Network) initDHT(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := net.Host.Connect(ctx, peerAddr); err != nil {
-				log.Debugf("Error connecting to Bootstrap peer: %v", err)
+			if err := (*net.Host).Connect(ctx, peerAddr); err != nil {
+				net.log.Debugf("Error connecting to Bootstrap peer: %v", err)
 			}
 		}()
 		wg.Wait()
@@ -115,7 +115,7 @@ func (net *Network) initDHT(ctx context.Context) error {
 }
 
 func (net *Network) isNewPeer(peer peer.AddrInfo) bool {
-	if net.Host.ID() == peer.ID {
+	if (*net.Host).ID() == peer.ID {
 		return false
 	}
 
@@ -145,8 +145,8 @@ func (net *Network) discoverPeers(ctx context.Context) {
 
 		for p := range peers {
 			if net.isNewPeer(p) {
-				if err := net.Host.Connect(ctx, p); err == nil {
-					log.Debugf("Connected to %s", p.ID)
+				if err := (*net.Host).Connect(ctx, p); err == nil {
+					net.log.Debugf("Connected to %s", p.ID)
 					pr := peer.PeerRecordFromAddrInfo(p)
 					net.Peers = append(net.Peers, pr)
 
@@ -156,7 +156,7 @@ func (net *Network) discoverPeers(ctx context.Context) {
 						Peer:      pr,
 					}
 
-					log.Debugf("Peer count %d", len(net.Peers))
+					net.log.Debugf("Peer count %d", len(net.Peers))
 					switch len(net.Peers) {
 					case 10:
 						discInterval = time.Minute
@@ -172,7 +172,7 @@ func (net *Network) discoverPeers(ctx context.Context) {
 		select {
 		case <-time.After(discInterval):
 		case <-ctx.Done():
-			log.Debug("Discovery ended")
+			net.log.Debug("Discovery ended")
 			break
 
 		}
@@ -198,10 +198,12 @@ func (net *Network) Connect(ctx context.Context, acc *account.Account) {
 }
 
 func New(conf *config.Config) *Network {
+	log := logger.GetLogger()
 	return &Network{
 		Connected:  false,
 		Port:       conf.Port,
 		StatusChan: make(chan ConnectionStatus),
 		Peers:      make([]*peer.PeerRecord, 0),
+		log:        log,
 	}
 }

@@ -1,6 +1,7 @@
 package inout
 
 import (
+	"crcls-converse/logger"
 	"encoding/json"
 )
 
@@ -10,6 +11,7 @@ type ErrorMessage struct {
 }
 
 func EmitError(err error) {
+	log := logger.GetLogger()
 	data, merr := json.Marshal(&ErrorMessage{
 		Type:    "error",
 		Message: err.Error(),

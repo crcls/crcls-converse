@@ -1,6 +1,9 @@
 package inout
 
 import (
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -38,6 +41,13 @@ type NoAccountMessage struct {
 	Type string `json:"type"`
 }
 
+type NewAccount struct {
+	Type       string         `json:"type"`
+	Address    common.Address `json:"address"`
+	SeedPhrase string         `json:"seedPhrase"`
+	Balance    *big.Int       `json:"balance"`
+}
+
 type ListChannelsMessage struct {
 	Type     string   `json:"type"`
 	Subject  CMD      `json:"subject"`
@@ -52,4 +62,15 @@ type ListPeersMessage struct {
 
 type MemberChangeMessage struct {
 	Type string `json:"type"`
+}
+
+type MemberCreateMessage struct {
+	Type    string `json:"type"`
+	Handle  string `json:"handle"`
+	Address string `json:"address"`
+	PFP     string `json:"pfp"`
+}
+
+func EmitMessage(msg []byte) {
+	internalIO.Write(msg)
 }

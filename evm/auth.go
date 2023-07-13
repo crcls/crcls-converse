@@ -1,6 +1,7 @@
 package evm
 
 import (
+	"crcls-converse/logger"
 	"encoding/hex"
 	"fmt"
 	"strconv"
@@ -61,6 +62,7 @@ func (w *Wallet) Siwe(chain, msg string) (*AuthSig, error) {
 }
 
 func VerifyAddress(pubKey common.Address, signature, plaintext string) bool {
+	log := logger.GetLogger()
 	sig, err := hex.DecodeString(signature[2:] /* Remove 0x */)
 	if err != nil {
 		log.Debug("AuthSig failed to hex decode sig", err)

@@ -2,8 +2,10 @@ package datastore
 
 import (
 	"context"
+	"crcls-converse/config"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	// "github.com/ipfs/go-datastore/query"
 	badger "github.com/ipfs/go-ds-badger3"
 	crdt "github.com/ipfs/go-ds-crdt"
+	logging "github.com/ipfs/go-log/v2"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -33,21 +36,22 @@ type Datastore struct {
 	Badger      *badger.Datastore
 	EventStream chan EntryEvent
 	crdt        *crdt.Datastore
+	log         *logging.ZapEventLogger
 }
 
-var log = logger.GetLogger()
 var internalDs *Datastore
 
 // TODO: need a home dot directory for these things
-const STORE_DIR = "./crcls-ds"
+const STORE_DIR = "ds"
 const CRCLS_NS = "/crcls/datastore/1.0.0"
 
-func NewDatastore(ctx context.Context, h host.Host, ps *pubsub.PubSub, dht *kaddht.IpfsDHT) *Datastore {
+func NewDatastore(ctx context.Context, conf *config.Config, h *host.Host, ps *pubsub.PubSub, dht *kaddht.IpfsDHT) *Datastore {
+	log := logger.GetLogger()
 	// opts := badger.Options{
 	// 	GcDiscardRatio: 0,
 	// 	GcInterval:     0,
 	// }
-	d, err := badger.NewDatastore(STORE_DIR, &badger.DefaultOptions)
+	d, err := badger.NewDatastore(filepath.Join(conf.CrclsDir, STORE_DIR), &badger.DefaultOptions)
 	if err != nil {
 		inout.EmitError(err)
 		return nil
@@ -59,7 +63,7 @@ func NewDatastore(ctx context.Context, h host.Host, ps *pubsub.PubSub, dht *kadd
 		return nil
 	}
 
-	dag, err := ipfslite.New(ctx, d, nil, h, dht, nil)
+	dag, err := ipfslite.New(ctx, d, nil, *h, dht, nil)
 	if err != nil {
 		inout.EmitError(err)
 		return nil
@@ -78,9 +82,10 @@ func NewDatastore(ctx context.Context, h host.Host, ps *pubsub.PubSub, dht *kadd
 	// }
 	copts := crdt.DefaultOptions()
 	copts.Logger = log
-	copts.RebroadcastInterval = time.Second * 3
-	copts.DAGSyncerTimeout = time.Second * 3
+	copts.RebroadcastInterval = time.Second * 33
+	copts.DAGSyncerTimeout = time.Second * 33
 	copts.PutHook = func(key ipfsDs.Key, value []byte) {
+		// log.Debugf("Key: %s, Value: %s\n", key.String(), string(value))
 		ee := EntryEvent{key, value}
 		evtStream <- ee
 	}
@@ -94,6 +99,7 @@ func NewDatastore(ctx context.Context, h host.Host, ps *pubsub.PubSub, dht *kadd
 		Badger:      d,
 		EventStream: evtStream,
 		crdt:        c,
+		log:         log,
 	}
 
 	internalDs = ds
@@ -122,21 +128,21 @@ func (ds *Datastore) Query(ctx context.Context, q query.Query) (query.Results, e
 
 func Put(ctx context.Context, key ipfsDs.Key, value []byte) error {
 	if internalDs == nil {
-		log.Fatal("Database is not initialized")
+		internalDs.log.Fatal("Database is not initialized")
 	}
 	return internalDs.Put(ctx, key, value)
 }
 
 func Get(ctx context.Context, key ipfsDs.Key) ([]byte, error) {
 	if internalDs == nil {
-		log.Fatal("Database is not initialized")
+		internalDs.log.Fatal("Database is not initialized")
 	}
 	return internalDs.Get(ctx, key)
 }
 
 func Query(ctx context.Context, q query.Query) (query.Results, error) {
 	if internalDs == nil {
-		log.Fatal("Database is not initialized")
+		internalDs.log.Fatal("Database is not initialized")
 	}
 	return internalDs.crdt.Query(ctx, q)
 }

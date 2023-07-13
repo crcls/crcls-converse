@@ -6,6 +6,7 @@ import (
 	"crcls-converse/channel"
 	"crcls-converse/config"
 	"crcls-converse/datastore"
+	"crcls-converse/evm"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
 	"crcls-converse/network"
@@ -20,8 +21,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-var log = logger.GetLogger()
-
 type ReadyMessage struct {
 	Type   string          `json:"type"`
 	Status string          `json:"status"`
@@ -32,12 +31,13 @@ type ReadyMessage struct {
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	conf := config.New()
+	log := logger.GetLogger()
 	io := inout.Connect()
 
 	a := account.Load(conf, io)
 	netw := network.New(conf)
 	netw.Connect(ctx, a)
-	ds := datastore.NewDatastore(ctx, netw.Host, netw.PubSub, netw.DHT)
+	ds := datastore.NewDatastore(ctx, conf, netw.Host, netw.PubSub, netw.DHT)
 	chMgr := channel.NewManager(ctx, netw, io, ds)
 
 	if a.Wallet != nil {
@@ -46,19 +46,19 @@ func main() {
 			log.Fatal(err)
 		}
 
-		log.Debugf("\n\n-----------------------\nWallet Connected\n-----------------------\nAddress: %s\nSeed Phrase: %s\nBalance: %d\n-----------------------\n", a.Wallet.Address, a.Wallet.SeedPhrase, balance)
-
 		ctxTO, cancel := context.WithTimeout(context.Background(), time.Second*3)
 		defer cancel()
 
-		member, err := account.GetMember(ctxTO, a.Wallet.Address)
+		member, err := account.GetMember(ctxTO, a.Wallet.Address, ds)
 		if err != nil {
 			log.Debug(err)
+		} else {
+			member.Balance = balance
+			a.Member = member
 		}
-		a.Member = member
 	}
 
-	readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", Host: netw.Host.ID(), Member: a.Member})
+	readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", Host: (*netw.Host).ID(), Member: a.Member})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -71,6 +71,52 @@ func main() {
 		select {
 		case cmd := <-io.InputChan:
 			switch cmd.Type {
+			case inout.READY:
+				readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", Host: (*netw.Host).ID(), Member: a.Member})
+				if err != nil {
+					log.Fatal(err)
+				}
+				io.Write(readyEvent)
+			case inout.ACCOUNT:
+				subcmd, err := cmd.NextSubcommand()
+				if err != nil {
+					inout.EmitError(err)
+					continue
+				}
+
+				switch subcmd {
+				case inout.CREATE:
+					emitNewAccount := func(wallet *evm.Wallet) {
+						balance, err := wallet.Balance()
+						if err != nil {
+							inout.EmitError(err)
+							return
+						}
+
+						msg := inout.NewAccount{
+							Type:       "account-create",
+							Address:    wallet.Address,
+							SeedPhrase: wallet.SeedPhrase,
+							Balance:    balance,
+						}
+
+						data, err := json.Marshal(&msg)
+						if err != nil {
+							inout.EmitError(err)
+							return
+						}
+
+						io.Write(data)
+					}
+
+					if a.Wallet != nil {
+						emitNewAccount(a.Wallet)
+						continue
+					}
+
+					a.CreateWallet()
+					emitNewAccount(a.Wallet)
+				}
 			case inout.LIST:
 				subcmd, err := cmd.NextSubcommand()
 				if err != nil {
@@ -81,7 +127,7 @@ func main() {
 				switch subcmd {
 				case inout.CHANNELS:
 					data, err := json.Marshal(&inout.ListChannelsMessage{
-						Type:     "List",
+						Type:     "list-channels",
 						Subject:  subcmd,
 						Channels: chMgr.ListChannels(),
 					})
@@ -92,7 +138,7 @@ func main() {
 					io.Write(data)
 				case inout.PEERS:
 					peers, err := json.Marshal(&inout.ListPeersMessage{
-						Type:    "list",
+						Type:    "list-peers",
 						Subject: subcmd,
 						Peers:   netw.Peers,
 					})
@@ -115,6 +161,7 @@ func main() {
 							}
 							dur := time.Hour * time.Duration(24*days)
 							chMgr.Active.GetRecentMessages(dur)
+							// TODO: emit result
 						}
 					}
 				}
@@ -140,31 +187,18 @@ func main() {
 
 				switch subcmd {
 				case inout.CREATE:
-					if a.Wallet != nil {
-						inout.EmitError(fmt.Errorf("Already joined."))
-						continue
-					}
-
 					member := &account.Member{}
 					if err := json.Unmarshal(cmd.Data, member); err != nil {
 						inout.EmitError(err)
 						continue
 					}
 
-					a.CreateWallet()
-
-					prettyAddress, err := a.Wallet.Address.MarshalText()
-					if err != nil {
-						panic(err)
-					}
-					fmt.Printf("\nMain: Pretty Address: %v\n\n", string(prettyAddress))
-
-					if err := account.NewMember(ctx, a, member); err != nil {
+					if err := account.NewMember(ctx, a, member, ds); err != nil {
 						inout.EmitError(err)
-						continue
+						// continue
 					}
 
-					evt := inout.MemberChangeMessage{Type: "memberChange"}
+					evt := inout.MemberChangeMessage{Type: "member-create"}
 					data, err := json.Marshal(evt)
 					if err != nil {
 						log.Fatal(err)

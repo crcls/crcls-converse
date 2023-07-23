@@ -147,8 +147,17 @@ func main() {
 								log.Fatal(err)
 							}
 							dur := time.Hour * time.Duration(24*days)
-							chMgr.Active.GetRecentMessages(dur)
-							// TODO: emit result
+							result, err := chMgr.Active.GetRecentMessages(dur)
+							if err != nil {
+								inout.EmitError(err)
+							}
+
+							messages, err := json.Marshal(&inout.ListMessagesMessage{Type: "list-messages", Channel: chMgr.Active.ID, Messages: result})
+							if err != nil {
+								log.Fatal(err)
+							}
+
+							io.Write(messages)
 						}
 					}
 				}

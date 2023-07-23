@@ -54,7 +54,7 @@ func (ch *Channel) Publish(message string) error {
 	// Append the timestamp
 	key := ch.key.ChildString(strconv.FormatInt(ts, 10)).Instance(string(hid))
 
-	// Save the message to the datastore
+	// Save the message to the network
 	if err = ch.ds.Put(ch.ctx, key, msgBytes); err != nil {
 		return err
 	}
@@ -80,12 +80,11 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 	msgs := make([]inout.Message, 0)
 
 	q := query.Query{
-		Prefix:   prefix.String(),
-		Orders:   []query.Order{query.OrderByKeyDescending{}},
+		Filters:  []query.Filter{query.FilterKeyPrefix{Prefix: prefix.String()}},
 		KeysOnly: false,
 	}
 
-	results, err := ch.ds.Query(ch.ctx, q)
+	results, err := ch.ds.Local.Query(ch.ctx, q)
 	if err != nil {
 		ch.log.Debug(err)
 		return msgs, err

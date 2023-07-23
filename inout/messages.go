@@ -60,6 +60,12 @@ type ListPeersMessage struct {
 	Peers   []*peer.PeerRecord `json:"peers"`
 }
 
+type ListMessagesMessage struct {
+	Type     string    `json:"type"`
+	Channel  string    `json:"channel"`
+	Messages []Message `json:"messages"`
+}
+
 type MemberChangeMessage struct {
 	Type string `json:"type"`
 }

@@ -86,7 +86,7 @@ func (a *Account) GetMember(ctx context.Context, ds *datastore.Datastore) {
 
 		key := ipfsDs.NewKey("members").Instance(string(prettyAddr))
 
-		if data, err := ds.Get(ctxTO, key); err == nil {
+		if data, err := ds.Local.Get(ctxTO, key); err == nil {
 			member := &Member{}
 
 			if err := json.Unmarshal(data, member); err != nil {

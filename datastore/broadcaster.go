@@ -4,6 +4,7 @@ import (
 	"context"
 	"crcls-converse/pb"
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/asn1"
@@ -22,15 +23,11 @@ type ECDSASignature struct {
 }
 
 func ecdsaPublicKeyToProto(key *ecdsa.PublicKey) (*pb.ECDSAPublicKey, error) {
-	curveName := key.Curve.Params().Name
-	x, err := asn1.Marshal(key.X)
-	if err != nil {
-		return nil, err
-	}
-	y, err := asn1.Marshal(key.Y)
-	if err != nil {
-		return nil, err
-	}
+	curveName := "secp256k1" // Hard-coding the curve name
+
+	// Directly convert big.Int to bytes
+	x := key.X.Bytes()
+	y := key.Y.Bytes()
 
 	return &pb.ECDSAPublicKey{
 		Curve: curveName,
@@ -38,23 +35,23 @@ func ecdsaPublicKeyToProto(key *ecdsa.PublicKey) (*pb.ECDSAPublicKey, error) {
 		Y:     y,
 	}, nil
 }
-func protoToEcdsaPublicKey(key *pb.ECDSAPublicKey) (*ecdsa.PublicKey, error) {
-	var x, y big.Int
 
-	// Unmarshal the X and Y values
-	_, err := asn1.Unmarshal(key.X, &x)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal X: %w", err)
+func protoToEcdsaPublicKey(key *pb.ECDSAPublicKey) (*ecdsa.PublicKey, error) {
+	var curve elliptic.Curve
+	switch key.Curve {
+	case "secp256k1":
+		curve = secp256k1.S256()
+	default:
+		return nil, fmt.Errorf("unknown elliptic curve %s", key.Curve)
 	}
-	_, err = asn1.Unmarshal(key.Y, &y)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal Y: %w", err)
-	}
+
+	x := new(big.Int).SetBytes(key.X)
+	y := new(big.Int).SetBytes(key.Y)
 
 	return &ecdsa.PublicKey{
-		Curve: secp256k1.S256(),
-		X:     &x,
-		Y:     &y,
+		Curve: curve,
+		X:     x,
+		Y:     y,
 	}, nil
 }
 

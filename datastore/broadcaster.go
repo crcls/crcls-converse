@@ -11,7 +11,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/golang/protobuf/proto"
 	crdt "github.com/ipfs/go-ds-crdt"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -52,7 +52,7 @@ func protoToEcdsaPublicKey(key *pb.ECDSAPublicKey) (*ecdsa.PublicKey, error) {
 	}
 
 	return &ecdsa.PublicKey{
-		Curve: crypto.S256(),
+		Curve: secp256k1.S256(),
 		X:     &x,
 		Y:     &y,
 	}, nil

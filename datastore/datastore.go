@@ -5,6 +5,8 @@ import (
 	"crcls-converse/config"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
+	"crypto/ecdsa"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -33,10 +35,12 @@ func (ee *EntryEvent) Sender() string {
 }
 
 type Datastore struct {
+	PK          *ecdsa.PrivateKey
 	Badger      *badger.Datastore
 	EventStream chan EntryEvent
 	crdt        *crdt.Datastore
 	log         *logging.ZapEventLogger
+	pubsub      *PubSubBroadcaster
 }
 
 var internalDs *Datastore
@@ -57,7 +61,7 @@ func NewDatastore(ctx context.Context, conf *config.Config, h *host.Host, ps *pu
 		return nil
 	}
 
-	bcast, err := crdt.NewPubSubBroadcaster(ctx, ps, CRCLS_NS)
+	bcast, err := NewPubSubBroadcaster(ctx, ps, CRCLS_NS)
 	if err != nil {
 		inout.EmitError(err)
 		return nil
@@ -85,12 +89,11 @@ func NewDatastore(ctx context.Context, conf *config.Config, h *host.Host, ps *pu
 	copts.RebroadcastInterval = time.Second * 33
 	copts.DAGSyncerTimeout = time.Second * 33
 	copts.PutHook = func(key ipfsDs.Key, value []byte) {
-		// log.Debugf("Key: %s, Value: %s\n", key.String(), string(value))
 		ee := EntryEvent{key, value}
 		evtStream <- ee
 	}
 
-	c, err := crdt.New(d, ipfsDs.NewKey(CRCLS_NS), dag, bcast, copts)
+	c, err := crdt.New(ipfsDs.NewMapDatastore(), ipfsDs.NewKey(CRCLS_NS), dag, bcast, copts)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -100,6 +103,7 @@ func NewDatastore(ctx context.Context, conf *config.Config, h *host.Host, ps *pu
 		EventStream: evtStream,
 		crdt:        c,
 		log:         log,
+		pubsub:      bcast,
 	}
 
 	internalDs = ds
@@ -107,11 +111,20 @@ func NewDatastore(ctx context.Context, conf *config.Config, h *host.Host, ps *pu
 	return ds
 }
 
+func (ds *Datastore) Authenticate(pk *ecdsa.PrivateKey) {
+	ds.PK = pk
+	ds.pubsub.Authenticate(pk)
+}
+
 func (ds *Datastore) Put(ctx context.Context, key ipfsDs.Key, value []byte) error {
+	if ds.PK == nil {
+		return fmt.Errorf("Not authenticated")
+	}
+
 	return ds.crdt.Put(ctx, key, value)
 }
 func (ds *Datastore) Get(ctx context.Context, key ipfsDs.Key) ([]byte, error) {
-	return ds.crdt.Get(ctx, key)
+	return ds.Badger.Get(ctx, key)
 }
 func (ds *Datastore) Delete(ctx context.Context, key ipfsDs.Key) error {
 	return ds.crdt.Delete(ctx, key)
@@ -123,7 +136,7 @@ func (ds *Datastore) Stats() crdt.Stats {
 	return ds.crdt.InternalStats()
 }
 func (ds *Datastore) Query(ctx context.Context, q query.Query) (query.Results, error) {
-	return ds.crdt.Query(ctx, q)
+	return ds.Badger.Query(ctx, q)
 }
 
 func Put(ctx context.Context, key ipfsDs.Key, value []byte) error {
@@ -144,5 +157,5 @@ func Query(ctx context.Context, q query.Query) (query.Results, error) {
 	if internalDs == nil {
 		internalDs.log.Fatal("Database is not initialized")
 	}
-	return internalDs.crdt.Query(ctx, q)
+	return internalDs.Query(ctx, q)
 }

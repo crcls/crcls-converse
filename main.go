@@ -22,10 +22,10 @@ import (
 )
 
 type ReadyMessage struct {
-	Type   string          `json:"type"`
-	Status string          `json:"status"`
-	Host   peer.ID         `json:"host"`
-	Member *account.Member `json:"member"`
+	Type    string           `json:"type"`
+	Status  string           `json:"status"`
+	Host    peer.ID          `json:"host"`
+	Account *account.Account `json:"account"`
 }
 
 func main() {
@@ -40,25 +40,11 @@ func main() {
 	ds := datastore.NewDatastore(ctx, conf, netw.Host, netw.PubSub, netw.DHT)
 	chMgr := channel.NewManager(ctx, netw, io, ds)
 
-	if a.Wallet != nil {
-		balance, err := a.Wallet.Balance()
-		if err != nil {
-			log.Fatal(err)
-		}
+	ctxTO, cancelTO := context.WithTimeout(context.Background(), time.Second*3)
+	a.GetMember(ctxTO, ds)
+	cancelTO()
 
-		ctxTO, cancel := context.WithTimeout(context.Background(), time.Second*3)
-		defer cancel()
-
-		member, err := account.GetMember(ctxTO, a.Wallet.Address, ds)
-		if err != nil {
-			log.Debug(err)
-		} else {
-			member.Balance = balance
-			a.Member = member
-		}
-	}
-
-	readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", Host: (*netw.Host).ID(), Member: a.Member})
+	readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", Host: (*netw.Host).ID(), Account: a})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,7 +58,7 @@ func main() {
 		case cmd := <-io.InputChan:
 			switch cmd.Type {
 			case inout.READY:
-				readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", Host: (*netw.Host).ID(), Member: a.Member})
+				readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", Host: (*netw.Host).ID(), Account: a})
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -115,6 +101,7 @@ func main() {
 					}
 
 					a.CreateWallet()
+					ds.Authenticate(a.Wallet.PrivKey)
 					emitNewAccount(a.Wallet)
 				}
 			case inout.LIST:

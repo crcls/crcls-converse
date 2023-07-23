@@ -1,0 +1,14 @@
+syntax = "proto3";
+option go_package = "proto/pb";
+
+message ECDSAPublicKey {
+    string curve = 1;
+    bytes x = 2;
+    bytes y = 3;
+}
+
+message CRDTBroadcast {
+    bytes message = 1;
+    bytes signature = 2;
+    ECDSAPublicKey key = 3;
+}

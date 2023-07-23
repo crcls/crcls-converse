@@ -7,7 +7,6 @@ import (
 	"crcls-converse/logger"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -20,7 +19,6 @@ type Member struct {
 	Channels []string       `json:"channels"`
 	Handle   string         `json:"handle"`
 	PFP      string         `json:"pfp"`
-	Balance  *big.Int       `json:"balance"`
 	key      ipfsDs.Key
 }
 
@@ -75,29 +73,27 @@ func NewMember(ctx context.Context, a *Account, m *Member, ds *datastore.Datasto
 	return nil
 }
 
-func GetMember(ctx context.Context, address common.Address, ds *datastore.Datastore) (*Member, error) {
+func (a *Account) GetMember(ctx context.Context, ds *datastore.Datastore) {
 	ctxTO, cancel := context.WithTimeout(ctx, time.Second*3)
 	defer cancel()
 
-	prettyAddr, err := address.MarshalText()
-	if err != nil {
-		return nil, err
+	if a.Wallet != nil {
+		prettyAddr, err := a.Wallet.Address.MarshalText()
+		if err != nil {
+			a.log.Fatal(err)
+		}
+
+		key := ipfsDs.NewKey("members").Instance(string(prettyAddr))
+
+		if data, err := ds.Get(ctxTO, key); err == nil {
+			member := &Member{}
+
+			if err := json.Unmarshal(data, member); err != nil {
+				a.log.Fatal(err)
+			}
+
+			member.key = key
+			a.Member = member
+		}
 	}
-
-	key := ipfsDs.NewKey("members").Instance(string(prettyAddr))
-
-	data, err := ds.Get(ctxTO, key)
-	if err != nil {
-		return nil, err
-	}
-
-	member := &Member{}
-
-	if err := json.Unmarshal(data, member); err != nil {
-		return nil, err
-	}
-
-	member.key = key
-
-	return member, nil
 }

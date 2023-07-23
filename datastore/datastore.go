@@ -89,6 +89,8 @@ func NewDatastore(ctx context.Context, conf *config.Config, h *host.Host, ps *pu
 	copts.RebroadcastInterval = time.Second * 33
 	copts.DAGSyncerTimeout = time.Second * 33
 	copts.PutHook = func(key ipfsDs.Key, value []byte) {
+		// TODO: moar validation
+		d.Put(context.Background(), key, value)
 		ee := EntryEvent{key, value}
 		evtStream <- ee
 	}

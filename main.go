@@ -163,7 +163,9 @@ func main() {
 				if chMgr.Active == nil {
 					inout.EmitError(fmt.Errorf("No active channel."))
 				} else {
-					chMgr.Active.Publish(string(cmd.Data))
+					if err := chMgr.Active.Publish(string(cmd.Data)); err != nil {
+						inout.EmitError(err)
+					}
 				}
 			case inout.MEMBER:
 				subcmd, err := cmd.NextSubcommand()

@@ -78,6 +78,7 @@ func (a *Account) GetMember(ctx context.Context, ds *datastore.Datastore) {
 	defer cancel()
 
 	if a.Wallet != nil {
+		ds.Authenticate(a.Wallet.PrivKey) // used to sign messages sent to the network
 		prettyAddr, err := a.Wallet.Address.MarshalText()
 		if err != nil {
 			a.log.Fatal(err)

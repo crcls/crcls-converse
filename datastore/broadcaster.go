@@ -4,7 +4,6 @@ import (
 	"context"
 	"crcls-converse/pb"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/asn1"
@@ -12,6 +11,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
 	crdt "github.com/ipfs/go-ds-crdt"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -80,20 +80,6 @@ func ecdsaPublicKeyToProto(key *ecdsa.PublicKey) (*pb.ECDSAPublicKey, error) {
 	}, nil
 }
 func protoToEcdsaPublicKey(key *pb.ECDSAPublicKey) (*ecdsa.PublicKey, error) {
-	var curve elliptic.Curve
-	switch key.Curve {
-	case "P-224":
-		curve = elliptic.P224()
-	case "P-256":
-		curve = elliptic.P256()
-	case "P-384":
-		curve = elliptic.P384()
-	case "P-521":
-		curve = elliptic.P521()
-	default:
-		return nil, fmt.Errorf("unknown elliptic curve %s", key.Curve)
-	}
-
 	var x, y big.Int
 
 	// Unmarshal the X and Y values
@@ -107,7 +93,7 @@ func protoToEcdsaPublicKey(key *pb.ECDSAPublicKey) (*ecdsa.PublicKey, error) {
 	}
 
 	return &ecdsa.PublicKey{
-		Curve: curve,
+		Curve: crypto.S256(),
 		X:     &x,
 		Y:     &y,
 	}, nil

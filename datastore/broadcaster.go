@@ -17,6 +17,47 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
+type ECDSASignature struct {
+	R, S *big.Int
+}
+
+func ecdsaPublicKeyToProto(key *ecdsa.PublicKey) (*pb.ECDSAPublicKey, error) {
+	curveName := key.Curve.Params().Name
+	x, err := asn1.Marshal(key.X)
+	if err != nil {
+		return nil, err
+	}
+	y, err := asn1.Marshal(key.Y)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.ECDSAPublicKey{
+		Curve: curveName,
+		X:     x,
+		Y:     y,
+	}, nil
+}
+func protoToEcdsaPublicKey(key *pb.ECDSAPublicKey) (*ecdsa.PublicKey, error) {
+	var x, y big.Int
+
+	// Unmarshal the X and Y values
+	_, err := asn1.Unmarshal(key.X, &x)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal X: %w", err)
+	}
+	_, err = asn1.Unmarshal(key.Y, &y)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal Y: %w", err)
+	}
+
+	return &ecdsa.PublicKey{
+		Curve: crypto.S256(),
+		X:     &x,
+		Y:     &y,
+	}, nil
+}
+
 // PubSubBroadcaster implements a Broadcaster using libp2p PubSub.
 type PubSubBroadcaster struct {
 	PK    *ecdsa.PrivateKey
@@ -62,43 +103,6 @@ func (pbc *PubSubBroadcaster) Authenticate(pk *ecdsa.PrivateKey) {
 	pbc.PK = pk
 }
 
-func ecdsaPublicKeyToProto(key *ecdsa.PublicKey) (*pb.ECDSAPublicKey, error) {
-	curveName := key.Curve.Params().Name
-	x, err := asn1.Marshal(key.X)
-	if err != nil {
-		return nil, err
-	}
-	y, err := asn1.Marshal(key.Y)
-	if err != nil {
-		return nil, err
-	}
-
-	return &pb.ECDSAPublicKey{
-		Curve: curveName,
-		X:     x,
-		Y:     y,
-	}, nil
-}
-func protoToEcdsaPublicKey(key *pb.ECDSAPublicKey) (*ecdsa.PublicKey, error) {
-	var x, y big.Int
-
-	// Unmarshal the X and Y values
-	_, err := asn1.Unmarshal(key.X, &x)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal X: %w", err)
-	}
-	_, err = asn1.Unmarshal(key.Y, &y)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal Y: %w", err)
-	}
-
-	return &ecdsa.PublicKey{
-		Curve: crypto.S256(),
-		X:     &x,
-		Y:     &y,
-	}, nil
-}
-
 // Broadcast publishes some data.
 func (pbc *PubSubBroadcaster) Broadcast(data []byte) error {
 	if pbc.PK == nil {
@@ -106,7 +110,15 @@ func (pbc *PubSubBroadcaster) Broadcast(data []byte) error {
 	}
 
 	hashedMessage := sha256.Sum256(data)
-	sig, err := ecdsa.SignASN1(rand.Reader, pbc.PK, hashedMessage[:])
+	r, s, err := ecdsa.Sign(rand.Reader, pbc.PK, hashedMessage[:])
+	if err != nil {
+		return err
+	}
+	// Create a signature struct
+	signature := ECDSASignature{R: r, S: s}
+
+	// Marshal the signature to ASN.1
+	sig, err := asn1.Marshal(signature)
 	if err != nil {
 		return err
 	}
@@ -154,7 +166,13 @@ func (pbc *PubSubBroadcaster) Next() ([]byte, error) {
 		return nil, err
 	}
 
-	if valid := ecdsa.VerifyASN1(pubkey, hashedMessage[:], broadcast.Signature); valid {
+	var sig ECDSASignature
+	_, err = asn1.Unmarshal(broadcast.Signature, &sig)
+	if err != nil {
+		return nil, err
+	}
+
+	if valid := ecdsa.Verify(pubkey, hashedMessage[:], sig.R, sig.S); valid {
 		return broadcast.Message, nil
 	}
 

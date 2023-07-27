@@ -2,10 +2,10 @@ package network
 
 import (
 	"context"
-	"crcls-converse/account"
 	"crcls-converse/config"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
+	"crypto/ecdsa"
 	"fmt"
 	"sync"
 	"time"
@@ -14,6 +14,8 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	// ethcrypto "github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/libp2p/go-libp2p/core/host"
 
@@ -40,6 +42,8 @@ type ConnectionStatus struct {
 }
 
 type Network struct {
+	PrivKey    crypto.PrivKey
+	PubKey     crypto.PubKey
 	Peers      []*peer.PeerRecord
 	Port       int
 	PubSub     *pubsub.PubSub
@@ -50,10 +54,10 @@ type Network struct {
 	log        *logging.ZapEventLogger
 }
 
-func (net *Network) startClient(ctx context.Context, identity crypto.PrivKey) error {
+func (net *Network) startClient(ctx context.Context) error {
 	opts := libp2p.ChainOptions(
 		libp2p.ProtocolVersion(ProtocolVersion),
-		libp2p.Identity(identity),
+		libp2p.Identity(net.PrivKey),
 		libp2p.Security(tls.ID, tls.New),
 		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", net.Port)),
 	)
@@ -179,8 +183,8 @@ func (net *Network) discoverPeers(ctx context.Context) {
 	}
 }
 
-func (net *Network) Connect(ctx context.Context, acc *account.Account) {
-	if err := net.startClient(ctx, acc.HostPk); err != nil {
+func (net *Network) Connect(ctx context.Context) {
+	if err := net.startClient(ctx); err != nil {
 		net.StatusChan <- ConnectionStatus{
 			Error:     err,
 			Connected: false,
@@ -197,13 +201,25 @@ func (net *Network) Connect(ctx context.Context, acc *account.Account) {
 	go net.discoverPeers(ctx)
 }
 
-func New(conf *config.Config) *Network {
+func New(ctx context.Context, conf *config.Config, key *ecdsa.PrivateKey) (*Network, error) {
 	log := logger.GetLogger()
-	return &Network{
+
+	privKey, err := crypto.UnmarshalSecp256k1PrivateKey(key.D.Bytes())
+	if err != nil {
+		return nil, err
+	}
+
+	net := &Network{
+		PrivKey:    privKey,
+		PubKey:     privKey.GetPublic(),
 		Connected:  false,
 		Port:       conf.Port,
 		StatusChan: make(chan ConnectionStatus),
 		Peers:      make([]*peer.PeerRecord, 0),
 		log:        log,
 	}
+
+	net.Connect(ctx)
+
+	return net, nil
 }

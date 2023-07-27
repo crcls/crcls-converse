@@ -3,35 +3,20 @@ package account
 import (
 	"crcls-converse/config"
 	"crcls-converse/evm"
-	"crcls-converse/inout"
 	"crcls-converse/logger"
-	"crypto/rand"
 	"encoding/json"
-	"io/ioutil"
 	"math/big"
 	"net"
-	"os"
 	"path/filepath"
-
-	"github.com/libp2p/go-libp2p/core/crypto"
 
 	logging "github.com/ipfs/go-log/v2"
 )
 
 type Account struct {
-	HostPk crypto.PrivKey
 	IP     []byte
 	Wallet *evm.Wallet
 	Member *Member
-	config *config.Config
 	log    *logging.ZapEventLogger
-}
-
-func (a *Account) CreateWallet() *evm.Wallet {
-	wallet := evm.New(a.config)
-	a.Wallet = wallet
-
-	return wallet
 }
 
 func (a *Account) MarshalJSON() ([]byte, error) {
@@ -85,60 +70,39 @@ func getIpAddress() (*net.UDPAddr, error) {
 	return ipAddress, nil
 }
 
-func GetIdentity(keyFile string) crypto.PrivKey {
-	var priv crypto.PrivKey
-	var err error
-	if _, err = os.Stat(keyFile); os.IsNotExist(err) {
-		// Key file does not exist, create a new one
-		priv, _, err = crypto.GenerateEd25519Key(rand.Reader)
-		if err != nil {
-			panic(err)
-		}
-
-		keyBytes, err := crypto.MarshalPrivateKey(priv)
-		if err != nil {
-			panic(err)
-		}
-
-		if err = ioutil.WriteFile(keyFile, keyBytes, 0600); err != nil {
-			panic(err)
-		}
-	} else {
-		// Load key from file
-		keyBytes, err := ioutil.ReadFile(keyFile)
-		if err != nil {
-			panic(err)
-		}
-		priv, err = crypto.UnmarshalPrivateKey(keyBytes)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	return priv
-}
-
-func Load(conf *config.Config, io *inout.IO) *Account {
+func Load(conf *config.Config) (*Account, error) {
 	log := logger.GetLogger()
-	hpk := GetIdentity(filepath.Join(conf.CrclsDir, "host_keyfile.pem"))
+	// TODO: support more chains
+	privKey, err := evm.LoadAccount(filepath.Join(conf.CrclsDir, "wallet_pk"))
+	if err != nil {
+		return nil, err
+	}
 
 	ip, err := getIpAddress()
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	account := &Account{
-		config: conf,
-		HostPk: hpk,
+		Wallet: evm.NewWallet(privKey),
 		IP:     []byte(ip.IP),
 		log:    log,
 	}
 
-	// TODO: support more chains
-	privKey, err := evm.LoadAccount(filepath.Join(conf.CrclsDir, "wallet_pk"))
-	if err == nil {
-		account.Wallet = evm.NewWallet(privKey)
+	return account, nil
+}
+
+func New(conf *config.Config) (*Account, error) {
+	log := logger.GetLogger()
+
+	ip, err := getIpAddress()
+	if err != nil {
+		return nil, err
 	}
 
-	return account
+	return &Account{
+		Wallet: evm.New(conf),
+		IP:     []byte(ip.IP),
+		log:    log,
+	}, nil
 }

@@ -3,208 +3,104 @@ package main
 import (
 	"context"
 	"crcls-converse/account"
-	"crcls-converse/channel"
 	"crcls-converse/config"
-	"crcls-converse/datastore"
-	"crcls-converse/evm"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
-	"crcls-converse/network"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
-	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type ReadyMessage struct {
 	Type    string           `json:"type"`
 	Status  string           `json:"status"`
-	Host    peer.ID          `json:"host"`
+	ID      common.Address   `json:"host"`
 	Account *account.Account `json:"account"`
 }
 
-func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	conf := config.New()
-	log := logger.GetLogger()
-	io := inout.Connect()
-
-	a := account.Load(conf, io)
-	netw := network.New(conf)
-	netw.Connect(ctx, a)
-	ds := datastore.NewDatastore(ctx, conf, netw.Host, netw.PubSub, netw.DHT)
-	chMgr := channel.NewManager(ctx, netw, io, ds)
-
-	ctxTO, cancelTO := context.WithTimeout(context.Background(), time.Second*3)
-	a.GetMember(ctxTO, ds)
-	cancelTO()
-
-	readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", Host: (*netw.Host).ID(), Account: a})
+func emitReadyEvent(app *CRCLS) error {
+	readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", ID: app.Account.Wallet.Address, Account: app.Account})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	io.Write(readyEvent)
+	app.IO.Write(readyEvent)
+
+	return nil
+}
+
+func ensureInit() {
+	if crcls == nil {
+		inout.EmitError(fmt.Errorf("Not authorized."))
+		os.Exit(1)
+	}
+}
+
+func main() {
+	log := logger.GetLogger()
+	ctx := context.Background()
+	conf := config.New()
+	io := inout.Connect()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT)
 
+	//-------------------------
+	// 1. Try init CRCLS
+	// 2. Success breaks first step
+	// 3. Wait for create-account or add-account
+	// 4. Init services
+	// 5. Reply with data
+
+	if err := LoadCRCLS(ctx, conf, io); err != nil {
+		inout.EmitError(err)
+
+		authCtx, authCancel := context.WithCancel(context.Background())
+		done := false
+		for !done {
+			select {
+			case cmd := <-io.InputChan:
+				if cmd.Type != inout.ACCOUNT {
+					inout.EmitError(fmt.Errorf("Not authorized."))
+				}
+
+				subcmd, err := cmd.NextSubcommand()
+				if err != nil {
+					inout.EmitError(err)
+					break
+				} else if subcmd != inout.CREATE {
+					inout.EmitError(fmt.Errorf("Must create an account."))
+					break
+				}
+
+				if err := CreateCRCLS(authCtx, conf, io); err != nil {
+					inout.EmitError(err)
+					break
+				}
+				done = true
+			case <-authCtx.Done():
+				done = true
+			case <-stop:
+				authCancel()
+				os.Exit(0)
+			}
+		}
+	}
+
+	emitReadyEvent(crcls)
+
 	for {
 		select {
 		case cmd := <-io.InputChan:
-			switch cmd.Type {
-			case inout.READY:
-				readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", Host: (*netw.Host).ID(), Account: a})
-				if err != nil {
-					log.Fatal(err)
-				}
-				io.Write(readyEvent)
-			case inout.ACCOUNT:
-				subcmd, err := cmd.NextSubcommand()
-				if err != nil {
-					inout.EmitError(err)
-					continue
-				}
-
-				switch subcmd {
-				case inout.CREATE:
-					emitNewAccount := func(wallet *evm.Wallet) {
-						balance, err := wallet.Balance()
-						if err != nil {
-							inout.EmitError(err)
-							return
-						}
-
-						msg := inout.NewAccount{
-							Type:       "account-create",
-							Address:    wallet.Address,
-							SeedPhrase: wallet.SeedPhrase,
-							Balance:    balance,
-						}
-
-						data, err := json.Marshal(&msg)
-						if err != nil {
-							inout.EmitError(err)
-							return
-						}
-
-						io.Write(data)
-					}
-
-					if a.Wallet != nil {
-						emitNewAccount(a.Wallet)
-						continue
-					}
-
-					a.CreateWallet()
-					ds.Authenticate(a.Wallet.PrivKey)
-					emitNewAccount(a.Wallet)
-				}
-			case inout.LIST:
-				subcmd, err := cmd.NextSubcommand()
-				if err != nil {
-					inout.EmitError(err)
-					continue
-				}
-
-				switch subcmd {
-				case inout.CHANNELS:
-					data, err := json.Marshal(&inout.ListChannelsMessage{
-						Type:     "list-channels",
-						Subject:  subcmd,
-						Channels: chMgr.ListChannels(),
-					})
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					io.Write(data)
-				case inout.PEERS:
-					peers, err := json.Marshal(&inout.ListPeersMessage{
-						Type:    "list-peers",
-						Subject: subcmd,
-						Peers:   netw.Peers,
-					})
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					io.Write(peers)
-				case inout.MESSAGES:
-					if chMgr.Active == nil {
-						inout.EmitError(fmt.Errorf("No active channel."))
-					} else {
-						sscmd, err := cmd.NextSubcommand()
-						if err != nil {
-							inout.EmitError(err)
-						} else {
-							days, err := strconv.ParseInt(string(sscmd), 10, 64)
-							if err != nil {
-								log.Fatal(err)
-							}
-							dur := time.Hour * time.Duration(24*days)
-							result, err := chMgr.Active.GetRecentMessages(dur)
-							if err != nil {
-								inout.EmitError(err)
-							}
-
-							messages, err := json.Marshal(&inout.ListMessagesMessage{Type: "list-messages", Channel: chMgr.Active.ID, Messages: result})
-							if err != nil {
-								log.Fatal(err)
-							}
-
-							io.Write(messages)
-						}
-					}
-				}
-			case inout.JOIN:
-				chid, err := cmd.NextSubcommand()
-				if err != nil {
-					inout.EmitError(err)
-				} else {
-					chMgr.Join(string(chid))
-				}
-			case inout.REPLY:
-				if chMgr.Active == nil {
-					inout.EmitError(fmt.Errorf("No active channel."))
-				} else {
-					if err := chMgr.Active.Publish(string(cmd.Data)); err != nil {
-						inout.EmitError(err)
-					}
-				}
-			case inout.MEMBER:
-				subcmd, err := cmd.NextSubcommand()
-				if err != nil {
-					inout.EmitError(err)
-					continue
-				}
-
-				switch subcmd {
-				case inout.CREATE:
-					member := &account.Member{}
-					if err := json.Unmarshal(cmd.Data, member); err != nil {
-						inout.EmitError(err)
-						continue
-					}
-
-					if err := account.NewMember(ctx, a, member, ds); err != nil {
-						inout.EmitError(err)
-						// continue
-					}
-
-					evt := inout.MemberChangeMessage{Type: "member-create"}
-					data, err := json.Marshal(evt)
-					if err != nil {
-						log.Fatal(err)
-					}
-					io.Write(data)
-				}
+			if cmd.Type == inout.READY {
+				emitReadyEvent(crcls)
+			} else if err := crcls.Run(ctx, cmd); err != nil {
+				inout.EmitError(err)
 			}
-		case status := <-netw.StatusChan:
+		case status := <-crcls.Net.StatusChan:
 			if status.Error != nil {
 				inout.EmitError(status.Error)
 			} else {
@@ -216,8 +112,7 @@ func main() {
 				io.Write(data)
 			}
 		case <-stop:
-			cancel()
-			break
+			os.Exit(0)
 		case <-ctx.Done():
 			os.Exit(0)
 		}

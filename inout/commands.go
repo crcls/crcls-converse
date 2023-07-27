@@ -6,6 +6,7 @@ import "fmt"
 
 // TODO: Organize this better
 const (
+	AUTH    = "auth"
 	LIST    = "list"
 	JOIN    = "join"
 	LEAVE   = "leave"

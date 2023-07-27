@@ -84,7 +84,7 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 		KeysOnly: false,
 	}
 
-	results, err := ch.ds.Local.Query(ch.ctx, q)
+	results, err := ch.ds.Query(ch.ctx, q)
 	if err != nil {
 		ch.log.Debug(err)
 		return msgs, err

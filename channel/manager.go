@@ -2,6 +2,7 @@ package channel
 
 import (
 	"context"
+	"crcls-converse/account"
 	"crcls-converse/datastore"
 	"crcls-converse/inout"
 	"crcls-converse/logger"
@@ -17,6 +18,7 @@ import (
 )
 
 type ChannelManager struct {
+	acc      *account.Account
 	ctx      context.Context
 	channels map[string]Channel
 	io       *inout.IO
@@ -26,9 +28,10 @@ type ChannelManager struct {
 	log      *logging.ZapEventLogger
 }
 
-func NewManager(ctx context.Context, net *network.Network, io *inout.IO, ds *datastore.Datastore) *ChannelManager {
+func NewManager(ctx context.Context, a *account.Account, net *network.Network, io *inout.IO, ds *datastore.Datastore) *ChannelManager {
 	log := logger.GetLogger()
 	ch := &ChannelManager{
+		acc: a,
 		ctx: ctx,
 		net: net,
 		io:  io,

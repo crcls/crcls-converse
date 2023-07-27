@@ -97,6 +97,7 @@ func NewPubSubBroadcaster(ctx context.Context, psub *pubsub.PubSub, topic string
 }
 
 func (pbc *PubSubBroadcaster) Authenticate(pk *ecdsa.PrivateKey) {
+	fmt.Printf("%+v\n", pbc)
 	pbc.PK = pk
 }
 

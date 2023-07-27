@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	ipfsDs "github.com/ipfs/go-datastore"
@@ -25,18 +26,20 @@ type ChannelManager struct {
 	ds       *datastore.Datastore
 	net      *network.Network
 	Active   *Channel
+	Address  common.Address
 	log      *logging.ZapEventLogger
 }
 
 func NewManager(ctx context.Context, a *account.Account, net *network.Network, io *inout.IO, ds *datastore.Datastore) *ChannelManager {
 	log := logger.GetLogger()
 	ch := &ChannelManager{
-		acc: a,
-		ctx: ctx,
-		net: net,
-		io:  io,
-		ds:  ds,
-		log: log,
+		acc:     a,
+		ctx:     ctx,
+		net:     net,
+		io:      io,
+		ds:      ds,
+		log:     log,
+		Address: a.Wallet.Address,
 	}
 
 	return ch
@@ -80,12 +83,19 @@ func (chm *ChannelManager) Join(id string) {
 
 		ch.Sub = sub
 
+		pubKey, err := chm.Address.MarshalText()
+		if err != nil {
+			inout.EmitError(err)
+			return
+		}
+
 		ch = Channel{
 			ctx:      chm.ctx,
 			io:       chm.io,
 			ds:       chm.ds,
 			key:      ipfsDs.KeyWithNamespaces([]string{"channels", id}),
 			log:      chm.log,
+			Address:  string(pubKey),
 			ID:       id,
 			Topic:    topic,
 			Host:     (*chm.net.Host),

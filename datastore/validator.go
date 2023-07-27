@@ -3,7 +3,6 @@ package datastore
 import (
 	"context"
 	"crcls-converse/config"
-	"fmt"
 	"path/filepath"
 
 	"github.com/ipfs/go-datastore"
@@ -60,7 +59,7 @@ type ValidatorBatch struct {
 }
 
 func (b *ValidatorBatch) Put(ctx context.Context, key datastore.Key, value []byte) error {
-	fmt.Printf("\nBatch: key: %s value %s\n\n", key, string(value))
+	// fmt.Printf("\nBatch: key: %s value %s\n\n", key, string(value))
 	return b.batch.Put(ctx, key, value)
 }
 

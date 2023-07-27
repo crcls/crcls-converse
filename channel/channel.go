@@ -23,6 +23,7 @@ type Channel struct {
 	ds       *datastore.Datastore
 	key      ipfsDs.Key
 	ID       string
+	Address  string
 	Sub      *pubsub.Subscription
 	Topic    *pubsub.Topic
 	Host     host.Host
@@ -37,7 +38,7 @@ func (ch *Channel) Publish(message string) error {
 	ts := time.Now().UnixMicro()
 	m := inout.Message{
 		Message:   message,
-		SenderID:  ch.Host.ID().Pretty(),
+		Sender:    ch.Address,
 		Timestamp: ts,
 	}
 
@@ -46,13 +47,8 @@ func (ch *Channel) Publish(message string) error {
 		return err
 	}
 
-	hid, err := ch.Host.ID().MarshalText()
-	if err != nil {
-		return err
-	}
-
 	// Append the timestamp
-	key := ch.key.ChildString(strconv.FormatInt(ts, 10)).Instance(string(hid))
+	key := ch.key.ChildString(strconv.FormatInt(ts, 10)).Instance(string(ch.Address))
 
 	// Save the message to the network
 	if err = ch.ds.Put(ch.ctx, key, msgBytes); err != nil {
@@ -127,7 +123,7 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 
 		msg := inout.Message{
 			Message:   reply.Message,
-			SenderID:  reply.Sender,
+			Sender:    reply.Sender,
 			Timestamp: ts,
 		}
 
@@ -138,18 +134,14 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 }
 
 func (ch *Channel) ListenDatastore() {
-	ch.log.Debug("\nListening to the datastore\n")
+	msgChan := ch.ds.Subscribe(ch.key)
 	for {
 		select {
-		case entry := <-ch.ds.EventStream:
-			if entry.Key.IsDescendantOf(ch.key) && ch.Host.ID().Pretty() != entry.Sender() {
-				ch.log.Debugf("IsDecendent: %s\n", entry.Key.String())
-
-				if ch.IsActive {
-					ch.EmitReply(entry.Value)
-				} else {
-					ch.Unread += 1
-				}
+		case msg := <-msgChan:
+			if ch.IsActive {
+				ch.EmitReply(msg)
+			} else {
+				ch.Unread += 1
 			}
 		case <-ch.ctx.Done():
 			return
@@ -172,19 +164,15 @@ func (ch *Channel) ListenMessages() {
 		ch.log.Debugf("Topic message: %+v\n", response)
 
 		// TODO: Decide what the open topic PubSub should be used for.
+		// 1. Requests for data not found in the local DB.
 	}
 }
 
-func (ch *Channel) EmitReply(msg []byte) {
-	message := inout.Message{}
-	if err := json.Unmarshal(msg, &message); err != nil {
-		inout.EmitError(err)
-	}
-
+func (ch *Channel) EmitReply(msg *inout.Message) {
 	data, err := json.Marshal(&inout.ReplyMessage{
 		Type:    "reply",
-		Sender:  message.SenderID,
-		Message: message.Message,
+		Sender:  msg.Sender,
+		Message: msg.Message,
 	})
 
 	if err != nil {

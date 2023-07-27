@@ -37,6 +37,7 @@ type Datastore struct {
 	ds          *ValidatorDatastore
 	log         *logging.ZapEventLogger
 	pubsub      *PubSubBroadcaster
+	subs        *Subscriptions
 }
 
 var internalDs *Datastore
@@ -47,6 +48,8 @@ const CRCLS_NS = "/crcls/datastore/1.0.0"
 
 func NewDatastore(ctx context.Context, conf *config.Config, h *host.Host, ps *pubsub.PubSub, dht *kaddht.IpfsDHT) *Datastore {
 	log := logger.GetLogger()
+
+	subs := NewSubscriptions()
 
 	vds, err := NewValidatorDatastore(conf)
 	if err != nil {
@@ -71,6 +74,7 @@ func NewDatastore(ctx context.Context, conf *config.Config, h *host.Host, ps *pu
 	copts.Logger = log
 	copts.RebroadcastInterval = time.Second * 33
 	copts.DAGSyncerTimeout = time.Second * 33
+	copts.PutHook = subs.Propagate
 
 	c, err := crdt.New(vds, ipfsDs.NewKey(CRCLS_NS), dag, bcast, copts)
 	if err != nil {
@@ -82,6 +86,7 @@ func NewDatastore(ctx context.Context, conf *config.Config, h *host.Host, ps *pu
 		ds:     vds,
 		log:    log,
 		pubsub: bcast,
+		subs:   subs,
 	}
 
 	internalDs = ds
@@ -126,4 +131,12 @@ func (ds *Datastore) Close() error {
 
 func (ds *Datastore) Stats() crdt.Stats {
 	return ds.crdt.InternalStats()
+}
+
+func (ds *Datastore) Subscribe(prefix ipfsDs.Key) chan *inout.Message {
+	return ds.subs.Subscribe(prefix)
+}
+
+func (ds *Datastore) Unsubscribe(prefix ipfsDs.Key) error {
+	return ds.subs.Unsubscribe(prefix)
 }

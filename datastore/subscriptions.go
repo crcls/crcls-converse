@@ -13,7 +13,6 @@ type Subscriptions struct {
 }
 
 func (sub *Subscriptions) Propagate(k ipfsDs.Key, v []byte) {
-	fmt.Printf("%s %s\n", k.String(), string(v))
 	msg := inout.Message{}
 	if err := json.Unmarshal(v, &msg); err != nil {
 		inout.EmitError(err)
@@ -21,7 +20,6 @@ func (sub *Subscriptions) Propagate(k ipfsDs.Key, v []byte) {
 	}
 
 	for key, handleSub := range sub.subs {
-		fmt.Printf("Prefix: %s\n", key)
 		if key.IsAncestorOf(k) || key.IsDescendantOf(key) {
 			fmt.Printf("Sending msg: %v\n", msg)
 			handleSub(&msg)

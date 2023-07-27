@@ -22,7 +22,6 @@ func GenerateAccount(keypath string) (*ecdsa.PrivateKey, error) {
 
 	keyfile, err := os.Create(keypath)
 	if err != nil {
-		fmt.Println("file error")
 		return nil, err
 	}
 	keyfile.Close()

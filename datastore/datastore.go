@@ -106,7 +106,6 @@ func (ds *Datastore) Get(ctx context.Context, key ipfsDs.Key) ([]byte, error) {
 func (ds *Datastore) Query(ctx context.Context, q query.Query) (query.Results, error) {
 	loc, err := ds.crdt.Query(ctx, q)
 	if err != nil {
-		fmt.Printf("\n%s\n\n", err.Error())
 		return nil, err
 	}
 

@@ -55,9 +55,9 @@ type ListChannelsMessage struct {
 }
 
 type ListPeersMessage struct {
-	Type    string     `json:"type"`
-	Subject CMD        `json:"subject"`
-	Peers   []*peer.ID `json:"peers"`
+	Type    string    `json:"type"`
+	Subject CMD       `json:"subject"`
+	Peers   []peer.ID `json:"peers"`
 }
 
 type ListMessagesMessage struct {

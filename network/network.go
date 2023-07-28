@@ -43,8 +43,9 @@ type ConnectionStatus struct {
 
 type Network struct {
 	PrivKey    crypto.PrivKey
-	PubKey     crypto.PubKey
-	Peers      []*peer.ID
+	PubKey     *ecdsa.PublicKey
+	Peers      []peer.ID
+	Dead       []peer.ID
 	Port       int
 	PubSub     *pubsub.PubSub
 	Connected  bool
@@ -119,12 +120,33 @@ func (net *Network) initDHT(ctx context.Context) error {
 }
 
 func (net *Network) isNewPeer(peer peer.AddrInfo) bool {
-	if (*net.Host).ID() == peer.ID {
+	pk, err := PeerIdToPublicKey(peer.ID)
+	if err != nil {
+		net.log.Fatal(err)
+	}
+
+	if net.PubKey.Equal(pk) {
 		return false
 	}
 
 	for _, p := range net.Peers {
-		if *p == peer.ID {
+		pkp, err := PeerIdToPublicKey(p)
+		if err != nil {
+			net.log.Debug(err)
+			continue
+		}
+		if pk.Equal(pkp) {
+			return false
+		}
+	}
+
+	for _, p := range net.Dead {
+		pkp, err := PeerIdToPublicKey(p)
+		if err != nil {
+			net.log.Debug(err)
+			continue
+		}
+		if pk.Equal(pkp) {
 			return false
 		}
 	}
@@ -151,7 +173,7 @@ func (net *Network) discoverPeers(ctx context.Context) {
 			if net.isNewPeer(p) {
 				if err := (*net.Host).Connect(ctx, p); err == nil {
 					net.log.Debugf("Connected to %s", p.ID)
-					net.Peers = append(net.Peers, &p.ID)
+					net.Peers = append(net.Peers, p.ID)
 
 					net.StatusChan <- ConnectionStatus{
 						Error:     nil,
@@ -160,14 +182,19 @@ func (net *Network) discoverPeers(ctx context.Context) {
 					}
 
 					net.log.Debugf("Peer count %d", len(net.Peers))
-					switch len(net.Peers) {
-					case 10:
+					l := len(net.Peers)
+					if l < 10 {
+						discInterval = time.Second
+					} else if l < 100 {
 						discInterval = time.Minute
-					case 100:
+					} else if l < 1000 {
 						discInterval = time.Minute * 30
-					case 1000:
+					} else {
 						discInterval = time.Hour
 					}
+				} else {
+					fmt.Println(err)
+					net.Dead = append(net.Dead, p.ID)
 				}
 			}
 		}
@@ -210,11 +237,11 @@ func New(ctx context.Context, conf *config.Config, key *ecdsa.PrivateKey) (*Netw
 
 	net := &Network{
 		PrivKey:    privKey,
-		PubKey:     privKey.GetPublic(),
+		PubKey:     &key.PublicKey,
 		Connected:  false,
 		Port:       conf.Port,
 		StatusChan: make(chan ConnectionStatus),
-		Peers:      make([]*peer.ID, 0),
+		Peers:      make([]peer.ID, 0),
 		log:        log,
 	}
 

@@ -193,7 +193,6 @@ func (net *Network) discoverPeers(ctx context.Context) {
 						discInterval = time.Hour
 					}
 				} else {
-					fmt.Println(err)
 					net.Dead = append(net.Dead, p.ID)
 				}
 			}

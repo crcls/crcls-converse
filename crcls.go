@@ -69,6 +69,25 @@ func CreateCRCLS(ctx context.Context, conf *config.Config, io *inout.IO) error {
 		return err
 	}
 
+	bal, err := a.Wallet.Balance()
+	if err != nil {
+		return err
+	}
+
+	msg := inout.NewAccount{
+		Type:       "account-create",
+		Address:    a.Wallet.Address,
+		SeedPhrase: a.Wallet.SeedPhrase,
+		Balance:    bal,
+	}
+
+	data, err := json.Marshal(&msg)
+	if err != nil {
+		return err
+	}
+
+	io.Write(data)
+
 	crcls = &CRCLS{
 		Account: a,
 		Config:  conf,

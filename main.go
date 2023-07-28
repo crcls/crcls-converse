@@ -81,6 +81,7 @@ func main() {
 					inout.EmitError(err)
 					break
 				}
+
 				done = true
 			case <-authCtx.Done():
 				done = true

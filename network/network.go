@@ -36,15 +36,15 @@ const ProtocolVersion = "0.0.1"
 var discInterval = time.Second
 
 type ConnectionStatus struct {
-	Error     error            `json:"error"`
-	Connected bool             `json:"connected"`
-	Peer      *peer.PeerRecord `json:"peer"`
+	Error     error   `json:"error"`
+	Connected bool    `json:"connected"`
+	Peer      peer.ID `json:"peer"`
 }
 
 type Network struct {
 	PrivKey    crypto.PrivKey
 	PubKey     crypto.PubKey
-	Peers      []*peer.PeerRecord
+	Peers      []*peer.ID
 	Port       int
 	PubSub     *pubsub.PubSub
 	Connected  bool
@@ -124,7 +124,7 @@ func (net *Network) isNewPeer(peer peer.AddrInfo) bool {
 	}
 
 	for _, p := range net.Peers {
-		if p.PeerID == peer.ID {
+		if *p == peer.ID {
 			return false
 		}
 	}
@@ -151,13 +151,12 @@ func (net *Network) discoverPeers(ctx context.Context) {
 			if net.isNewPeer(p) {
 				if err := (*net.Host).Connect(ctx, p); err == nil {
 					net.log.Debugf("Connected to %s", p.ID)
-					pr := peer.PeerRecordFromAddrInfo(p)
-					net.Peers = append(net.Peers, pr)
+					net.Peers = append(net.Peers, &p.ID)
 
 					net.StatusChan <- ConnectionStatus{
 						Error:     nil,
 						Connected: true,
-						Peer:      pr,
+						Peer:      p.ID,
 					}
 
 					net.log.Debugf("Peer count %d", len(net.Peers))
@@ -215,7 +214,7 @@ func New(ctx context.Context, conf *config.Config, key *ecdsa.PrivateKey) (*Netw
 		Connected:  false,
 		Port:       conf.Port,
 		StatusChan: make(chan ConnectionStatus),
-		Peers:      make([]*peer.PeerRecord, 0),
+		Peers:      make([]*peer.ID, 0),
 		log:        log,
 	}
 

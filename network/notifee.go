@@ -37,14 +37,14 @@ func (n *Notifee) Connected(netw net.Network, con net.Conn) {
 }
 
 func (n *Notifee) Disconnected(netw net.Network, con net.Conn) {
-	peerRecord := netw.Peerstore().PeerInfo(con.RemotePeer())
+	peerId := con.RemotePeer()
 
 	for i, p := range n.net.Peers {
-		if p.PeerID == peerRecord.ID {
-			n.log.Debugf("Peer %s has disconnected", peerRecord.ID)
+		if *p == peerId {
+			n.log.Debugf("Peer %s has disconnected", peerId)
 
 			if len(n.net.Peers) == 1 {
-				n.net.Peers = make([]*peer.PeerRecord, 0)
+				n.net.Peers = make([]*peer.ID, 0)
 			} else if i == 0 {
 				n.net.Peers = n.net.Peers[1:]
 			} else if i == len(n.net.Peers)-1 {
@@ -57,7 +57,7 @@ func (n *Notifee) Disconnected(netw net.Network, con net.Conn) {
 
 			n.net.StatusChan <- ConnectionStatus{
 				Connected: false,
-				Peer:      peer.PeerRecordFromAddrInfo(peerRecord),
+				Peer:      peerId,
 			}
 		}
 	}

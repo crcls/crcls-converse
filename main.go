@@ -5,7 +5,8 @@ import (
 	"crcls-converse/account"
 	"crcls-converse/config"
 	"crcls-converse/inout"
-	"crcls-converse/logger"
+	"crcls-converse/network"
+
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type ReadyMessage struct {
@@ -40,7 +42,6 @@ func ensureInit() {
 }
 
 func main() {
-	log := logger.GetLogger()
 	ctx := context.Background()
 	conf := config.New()
 	io := inout.Connect()
@@ -104,9 +105,22 @@ func main() {
 			if status.Error != nil {
 				inout.EmitError(status.Error)
 			} else {
-				data, err := json.Marshal(inout.PeerMessage{Type: "peer", Connected: status.Connected, Id: status.Peer.PeerID})
+				epk, err := network.PeerIdToPublicKey(status.Peer)
 				if err != nil {
-					log.Fatal(err)
+					inout.EmitError(err)
+					break
+				}
+
+				addr, err := crypto.PubkeyToAddress(*epk).MarshalText()
+				if err != nil {
+					inout.EmitError(err)
+					break
+				}
+
+				data, err := json.Marshal(inout.PeerMessage{Type: "peer", Connected: status.Connected, Id: string(addr)})
+				if err != nil {
+					inout.EmitError(err)
+					break
 				}
 
 				io.Write(data)

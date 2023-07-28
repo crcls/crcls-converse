@@ -32,9 +32,9 @@ type StatusMessage struct {
 }
 
 type PeerMessage struct {
-	Type      string  `json:"type"`
-	Connected bool    `json:"connected"`
-	Id        peer.ID `json:"id"`
+	Type      string `json:"type"`
+	Connected bool   `json:"connected"`
+	Id        string `json:"id"`
 }
 
 type NoAccountMessage struct {
@@ -55,9 +55,9 @@ type ListChannelsMessage struct {
 }
 
 type ListPeersMessage struct {
-	Type    string             `json:"type"`
-	Subject CMD                `json:"subject"`
-	Peers   []*peer.PeerRecord `json:"peers"`
+	Type    string     `json:"type"`
+	Subject CMD        `json:"subject"`
+	Peers   []*peer.ID `json:"peers"`
 }
 
 type ListMessagesMessage struct {

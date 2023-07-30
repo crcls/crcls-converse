@@ -120,9 +120,9 @@ func (net *Network) initDHT(ctx context.Context) error {
 }
 
 func (net *Network) isNewPeer(peer peer.AddrInfo) bool {
-	pk, err := PeerIdToPublicKey(peer.ID)
-	if err != nil {
-		net.log.Fatal(err)
+	pk, _ := PeerIdToPublicKey(peer.ID)
+	if pk == nil {
+		return false
 	}
 
 	if net.PubKey.Equal(pk) {
@@ -143,7 +143,6 @@ func (net *Network) isNewPeer(peer peer.AddrInfo) bool {
 	for _, p := range net.Dead {
 		pkp, err := PeerIdToPublicKey(p)
 		if err != nil {
-			net.log.Debug(err)
 			continue
 		}
 		if pk.Equal(pkp) {
@@ -195,6 +194,8 @@ func (net *Network) discoverPeers(ctx context.Context) {
 				} else {
 					net.Dead = append(net.Dead, p.ID)
 				}
+			} else {
+				net.Dead = append(net.Dead, p.ID)
 			}
 		}
 

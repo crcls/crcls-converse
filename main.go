@@ -5,6 +5,7 @@ import (
 	"crcls-converse/account"
 	"crcls-converse/config"
 	"crcls-converse/inout"
+	"crcls-converse/logger"
 	"crcls-converse/network"
 
 	"encoding/json"
@@ -13,19 +14,29 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type ReadyMessage struct {
 	Type    string           `json:"type"`
 	Status  string           `json:"status"`
-	ID      common.Address   `json:"host"`
 	Account *account.Account `json:"account"`
+	Circles []*Circle        `json:"circles"`
 }
 
 func emitReadyEvent(app *CRCLS) error {
-	readyEvent, err := json.Marshal(&ReadyMessage{Type: "ready", Status: "connected", ID: app.Account.Wallet.Address, Account: app.Account})
+	log := logger.GetLogger()
+	circles, err := app.ListCircles(context.Background())
+	if err != nil {
+		log.Debug(err)
+	}
+
+	readyEvent, err := json.Marshal(&ReadyMessage{
+		Type:    "ready",
+		Status:  "connected",
+		Account: app.Account,
+		Circles: circles,
+	})
 	if err != nil {
 		return err
 	}
@@ -57,7 +68,9 @@ func main() {
 	// 5. Reply with data
 
 	if err := LoadCRCLS(ctx, conf, io); err != nil {
-		inout.EmitError(err)
+		if _, ok := err.(*inout.KeyNotFoundError); !ok {
+			inout.EmitError(err)
+		}
 
 		authCtx, authCancel := context.WithCancel(context.Background())
 		done := false
@@ -66,6 +79,7 @@ func main() {
 			case cmd := <-io.InputChan:
 				if cmd.Type != inout.ACCOUNT {
 					inout.EmitError(fmt.Errorf("Not authorized."))
+					break
 				}
 
 				subcmd, err := cmd.NextSubcommand()

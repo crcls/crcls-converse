@@ -40,7 +40,6 @@ func (n *Notifee) Disconnected(netw net.Network, con net.Conn) {
 	peerId := con.RemotePeer()
 	pk, err := PeerIdToPublicKey(peerId)
 	if err != nil {
-		n.log.Debug(err)
 		return
 	}
 

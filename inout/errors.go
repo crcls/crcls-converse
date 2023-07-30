@@ -7,7 +7,13 @@ import (
 
 type ErrorMessage struct {
 	Type    string `json:"type"`
-	Message string
+	Message string `json:"message"`
+}
+
+type KeyNotFoundError struct{}
+
+func (e *KeyNotFoundError) Error() string {
+	return "Keyfile not found."
 }
 
 func EmitError(err error) {

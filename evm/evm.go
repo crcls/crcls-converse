@@ -1,8 +1,8 @@
 package evm
 
 import (
+	"crcls-converse/inout"
 	"crypto/ecdsa"
-	"fmt"
 	"os"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -40,7 +40,7 @@ func GenerateSeedPhrase(pk *ecdsa.PrivateKey) (string, error) {
 func LoadAccount(keypath string) (*ecdsa.PrivateKey, error) {
 	if _, err := os.Stat(keypath); err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("Keyfile not found.")
+			return nil, &inout.KeyNotFoundError{}
 		}
 
 		return nil, err

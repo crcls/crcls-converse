@@ -13,20 +13,20 @@ import (
 )
 
 type Account struct {
-	IP     []byte
-	Wallet *evm.Wallet
-	Member *Member
-	log    *logging.ZapEventLogger
+	Circles []string
+	IP      []byte
+	Wallet  *evm.Wallet
+	Member  *Member
+	log     *logging.ZapEventLogger
 }
 
 func (a *Account) MarshalJSON() ([]byte, error) {
 	data := struct {
-		Address  string   `json:"address"`
-		Balance  *big.Int `json:"balance"`
-		Handle   string   `json:"handle"`
-		Pfp      string   `json:"pfp"`
-		Bio      string   `json:"bio"`
-		Channels []string `json:"channels"`
+		Address string   `json:"address"`
+		Balance *big.Int `json:"balance"`
+		Handle  *string  `json:"handle"`
+		Pfp     *string  `json:"pfp"`
+		Bio     *string  `json:"bio"`
 	}{}
 
 	if a.Wallet != nil {
@@ -45,10 +45,9 @@ func (a *Account) MarshalJSON() ([]byte, error) {
 	}
 
 	if a.Member != nil {
-		data.Handle = a.Member.Handle
-		data.Pfp = a.Member.PFP
-		data.Bio = a.Member.Bio
-		data.Channels = a.Member.Channels
+		data.Handle = &a.Member.Handle
+		data.Pfp = &a.Member.PFP
+		data.Bio = &a.Member.Bio
 	}
 
 	if a.Wallet == nil && a.Member == nil {

@@ -26,24 +26,6 @@ type CRCLS struct {
 	IO      *inout.IO
 }
 
-func (crcls *CRCLS) initServices(ctx context.Context) error {
-	netw, err := network.New(ctx, crcls.Config, crcls.Account.Wallet.PrivKey)
-	if err != nil {
-		return err
-	}
-
-	ds := datastore.NewDatastore(ctx, crcls.Config, netw.Host, netw.PubSub, netw.DHT)
-	ds.Authenticate(crcls.Account.Wallet.PrivKey)
-
-	chMgr := channel.NewManager(ctx, crcls.Account, netw, crcls.IO, ds)
-
-	crcls.Net = netw
-	crcls.DS = ds
-	crcls.ChMgr = chMgr
-
-	return nil
-}
-
 func LoadCRCLS(ctx context.Context, conf *config.Config, io *inout.IO) error {
 	a, err := account.Load(conf)
 	if err != nil {
@@ -97,6 +79,24 @@ func CreateCRCLS(ctx context.Context, conf *config.Config, io *inout.IO) error {
 	if err := crcls.initServices(ctx); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (crcls *CRCLS) initServices(ctx context.Context) error {
+	netw, err := network.New(ctx, crcls.Config, crcls.Account.Wallet.PrivKey)
+	if err != nil {
+		return err
+	}
+
+	ds := datastore.NewDatastore(ctx, crcls.Config, netw.Host, netw.PubSub, netw.DHT)
+	ds.Authenticate(crcls.Account.Wallet.PrivKey)
+
+	chMgr := channel.NewManager(ctx, crcls.Account, netw, crcls.IO, ds)
+
+	crcls.Net = netw
+	crcls.DS = ds
+	crcls.ChMgr = chMgr
 
 	return nil
 }

@@ -8,7 +8,6 @@ import (
 	"crcls-converse/logger"
 	"crcls-converse/network"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -49,21 +48,8 @@ func (chm *ChannelManager) Join(id string) {
 	var ch Channel
 	var ok bool
 
-	found := false
-	for _, chanId := range chm.ListChannels() {
-		if id == chanId {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		inout.EmitError(fmt.Errorf("Channel not found. %s", id))
-		return
-	}
-
-	for _, value := range chm.channels {
-		value.IsActive = false
+	for _, channel := range chm.channels {
+		channel.IsActive = false
 	}
 
 	if ch, ok = chm.channels[id]; !ok {
@@ -142,5 +128,5 @@ func (chm *ChannelManager) ListChannels() []string {
 	// TODO: get the list of channels from storage somewhere
 
 	// log.Debug("Only the global channel is availble, so far.")
-	return []string{"global"}
+	return []string{"/crcls"}
 }

@@ -15,7 +15,7 @@ type Message struct {
 
 type ReplyMessage struct {
 	Type    string   `json:"type"`
-	Message *hessage `json:"message"`
+	Message *Message `json:"message"`
 }
 
 type JoinMessage struct {

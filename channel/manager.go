@@ -48,53 +48,57 @@ func (chm *ChannelManager) Join(id string) {
 	var ch Channel
 	var ok bool
 
-	for _, channel := range chm.channels {
-		channel.IsActive = false
-	}
-
-	if ch, ok = chm.channels[id]; !ok {
-		// join the pubsub topic
-		topic, err := chm.net.PubSub.Join(id)
-		if err != nil {
-			inout.EmitError(err)
-			return
-		}
-
-		// and subscribe to it
-		sub, err := topic.Subscribe()
-		if err != nil {
-			inout.EmitError(err)
-			return
-		}
-
-		ch.Sub = sub
-
-		pubKey, err := chm.Address.MarshalText()
-		if err != nil {
-			inout.EmitError(err)
-			return
-		}
-
-		ch = Channel{
-			ctx:      chm.ctx,
-			io:       chm.io,
-			ds:       chm.ds,
-			key:      ipfsDs.KeyWithNamespaces([]string{"channels", id}),
-			log:      chm.log,
-			Address:  string(pubKey),
-			ID:       id,
-			Topic:    topic,
-			Host:     (*chm.net.Host),
-			Sub:      sub,
-			IsActive: true,
-			Unread:   0,
-		}
-
-		go ch.ListenMessages()
-		go ch.ListenDatastore()
+	if chm.Active != nil && chm.Active.ID == id {
+		ch = *chm.Active
 	} else {
-		ch.IsActive = true
-		ch.Unread = 0
+		for _, channel := range chm.channels {
+			channel.IsActive = false
+		}
+
+		if ch, ok = chm.channels[id]; !ok {
+			// join the pubsub topic
+			topic, err := chm.net.PubSub.Join(id)
+			if err != nil {
+				inout.EmitError(err)
+				return
+			}
+
+			// and subscribe to it
+			sub, err := topic.Subscribe()
+			if err != nil {
+				inout.EmitError(err)
+				return
+			}
+
+			ch.Sub = sub
+
+			pubKey, err := chm.Address.MarshalText()
+			if err != nil {
+				inout.EmitError(err)
+				return
+			}
+
+			ch = Channel{
+				ctx:      chm.ctx,
+				io:       chm.io,
+				ds:       chm.ds,
+				key:      ipfsDs.KeyWithNamespaces([]string{"channels", id}),
+				log:      chm.log,
+				Address:  string(pubKey),
+				ID:       id,
+				Topic:    topic,
+				Host:     (*chm.net.Host),
+				Sub:      sub,
+				IsActive: true,
+				Unread:   0,
+			}
+
+			go ch.ListenMessages()
+			go ch.ListenDatastore()
+		} else {
+			ch.IsActive = true
+			ch.Unread = 0
+		}
 	}
 
 	history, err := ch.GetRecentMessages(time.Hour * 24 * 7)

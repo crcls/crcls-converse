@@ -107,24 +107,14 @@ func (ch *Channel) GetRecentMessages(timespan time.Duration) ([]inout.Message, e
 	}
 
 	for _, entry := range entries {
-		reply := inout.ReplyMessage{}
-		if err := json.Unmarshal(entry.Value, &reply); err != nil {
+		msg := inout.Message{}
+		if err := json.Unmarshal(entry.Value, &msg); err != nil {
 			ch.log.Error(err)
 			continue
 		}
 
-		key := ipfsDs.NewKey(entry.Key)
-		base := strings.Split(key.BaseNamespace(), ":")
-		ts, err := strconv.ParseInt(base[0], 10, 64)
-
 		if err != nil {
 			ch.log.Fatal(err)
-		}
-
-		msg := inout.Message{
-			Message:   reply.Message,
-			Sender:    reply.Sender,
-			Timestamp: ts,
 		}
 
 		msgs = append(msgs, msg)
@@ -171,8 +161,7 @@ func (ch *Channel) ListenMessages() {
 func (ch *Channel) EmitReply(msg *inout.Message) {
 	data, err := json.Marshal(&inout.ReplyMessage{
 		Type:    "reply",
-		Sender:  msg.Sender,
-		Message: msg.Message,
+		Message: msg,
 	})
 
 	if err != nil {

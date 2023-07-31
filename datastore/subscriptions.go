@@ -21,7 +21,7 @@ func (sub *Subscriptions) Propagate(k ipfsDs.Key, v []byte) {
 
 	for key, handleSub := range sub.subs {
 		if key.IsAncestorOf(k) || key.IsDescendantOf(key) {
-			fmt.Printf("Sending msg: %v\n", msg)
+			// fmt.Printf("Sending msg: %v\n", msg)
 			handleSub(&msg)
 		}
 	}

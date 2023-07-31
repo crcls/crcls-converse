@@ -14,9 +14,8 @@ type Message struct {
 }
 
 type ReplyMessage struct {
-	Type    string `json:"type"`
-	Sender  string `json:"sender"`
-	Message string `json:"message"`
+	Type    string   `json:"type"`
+	Message *hessage `json:"message"`
 }
 
 type JoinMessage struct {

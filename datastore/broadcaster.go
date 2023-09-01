@@ -13,9 +13,9 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
-	"github.com/golang/protobuf/proto"
 	crdt "github.com/ipfs/go-ds-crdt"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"google.golang.org/protobuf/proto"
 )
 
 type ECDSASignature struct {
